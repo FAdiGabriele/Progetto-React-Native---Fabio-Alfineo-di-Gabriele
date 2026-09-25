@@ -12,7 +12,7 @@ export default function RootLayout() {
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <I18nProvider>
         <Stack>
-          <Stack.Screen name="index" options={{ title: 'Notizie' }} />
+          <Stack.Screen name="index" options={{ title: '' }} />
         </Stack>
       </I18nProvider>
       <StatusBar style="auto" />
