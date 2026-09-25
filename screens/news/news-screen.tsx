@@ -1,5 +1,5 @@
 import { Stack } from 'expo-router';
-import { useEffect, useMemo, useRef, type ReactElement } from 'react';
+import { useCallback, useEffect, useMemo, useRef, type ReactElement } from 'react';
 import { Alert, StyleSheet, useWindowDimensions } from 'react-native';
 
 import { CategoryChips, type CategoryChipOption } from '@/components/news/category-chips';
@@ -8,6 +8,7 @@ import { ThemedView } from '@/components/themed-view';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
 import { LoadingState } from '@/components/ui/loading-state';
+import { TextButton } from '@/components/ui/text-button';
 import { NEWS_SECTIONS, type NewsSectionKey } from '@/constants/news-sections';
 import { useI18n, type I18n } from '@/i18n/i18n-provider';
 import type { Article, NewsError } from '@/repositories/news-model';
@@ -15,10 +16,12 @@ import { useNewsViewModel } from '@/screens/news/use-news-view-model';
 import { formatDateTime } from '@/utils/date';
 import { getNewsLayout } from '@/utils/layout';
 
-// Opening the article in the browser is not implemented yet.
-function noop() {}
-
-function toListItem(article: Article, t: I18n['t'], locale: I18n['locale']): NewsListItem {
+function toListItem(
+  article: Article,
+  t: I18n['t'],
+  locale: I18n['locale'],
+  onPress: () => void
+): NewsListItem {
   return {
     id: article.id,
     title: article.title,
@@ -28,26 +31,53 @@ function toListItem(article: Article, t: I18n['t'], locale: I18n['locale']): New
     author: article.author,
     imageUrl: article.imageUrl,
     accessibilityLabel: t('card.a11y', { title: article.title, source: article.sourceName }),
-    onPress: noop,
+    onPress,
   };
 }
 
 export function NewsScreen() {
-  const { articles, status, error, selectedSection, selectSection, refresh } = useNewsViewModel();
-  const { t, locale } = useI18n();
+  const { articles, status, error, selectedSection, selectSection, refresh, openArticle } =
+    useNewsViewModel();
+  const { t, locale, toggleLanguage } = useI18n();
   const { width } = useWindowDimensions();
   const { columns, horizontalMargin } = getNewsLayout(width);
 
-  const screenOptions = useMemo(() => ({ title: t('news.title') }), [t]);
+  const screenOptions = useMemo(
+    () => ({
+      title: t('news.title'),
+      headerRight: () => (
+        <TextButton
+          title={t('language.switch')}
+          accessibilityLabel={t('language.switchA11y')}
+          onPress={toggleLanguage}
+        />
+      ),
+    }),
+    [t, toggleLanguage]
+  );
 
   const sectionOptions = useMemo<CategoryChipOption<NewsSectionKey>[]>(
     () => NEWS_SECTIONS.map((section) => ({ key: section.key, label: t(section.labelKey) })),
     [t]
   );
 
+  const handleArticlePress = useCallback(
+    (article: Article) => {
+      openArticle(article).then((opened) => {
+        if (!opened) {
+          Alert.alert(t('errors.openArticle'), undefined, [{ text: t('states.close') }]);
+        }
+      });
+    },
+    [openArticle, t]
+  );
+
   const items = useMemo(
-    () => articles.map((article) => toListItem(article, t, locale)),
-    [articles, locale, t]
+    () =>
+      articles.map((article) =>
+        toListItem(article, t, locale, () => handleArticlePress(article))
+      ),
+    [articles, handleArticlePress, locale, t]
   );
 
   const hasArticles = articles.length > 0;

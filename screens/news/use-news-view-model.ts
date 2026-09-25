@@ -1,4 +1,6 @@
+import { openBrowserAsync } from 'expo-web-browser';
 import { useCallback, useEffect, useReducer, useRef } from 'react';
+import { Linking, Platform } from 'react-native';
 
 import { NEWS_SECTIONS, type NewsSectionKey } from '@/constants/news-sections';
 import { NewsError, type Article } from '@/repositories/news-model';
@@ -13,6 +15,12 @@ export type NewsViewModel = {
   selectedSection: NewsSectionKey;
   selectSection: (section: NewsSectionKey) => void;
   refresh: () => void;
+  /**
+   * Opens the article in the in-app browser, or in a new tab on web, with the system
+   * browser as fallback; resolves to false when neither could open it. A call while
+   * another opening is in progress is ignored and resolves to true.
+   */
+  openArticle: (article: Article) => Promise<boolean>;
 };
 
 type State = {
@@ -55,14 +63,34 @@ function toNewsError(error: unknown): NewsError {
   return error instanceof NewsError ? error : new NewsError('unknown');
 }
 
+async function openUrl(url: string): Promise<boolean> {
+  // On web the in-app browser is a popup window, so the URL opens in a new tab with Linking.
+  if (Platform.OS !== 'web') {
+    try {
+      await openBrowserAsync(url);
+      return true;
+    } catch {
+      // The in-app browser is unavailable or failed: the system browser is the fallback.
+    }
+  }
+  try {
+    await Linking.openURL(url);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
- * State and actions of the news screen: the selected section, its articles and the
- * outcome of the last load. Every load cancels the previous one, whose outcome is
- * discarded, so only the most recent request ever updates the state.
+ * State and actions of the news screen: the selected section, its articles, the
+ * outcome of the last load and the opening of an article in the browser. Every load
+ * cancels the previous one, whose outcome is discarded, so only the most recent
+ * request ever updates the state.
  */
 export function useNewsViewModel(): NewsViewModel {
   const [state, dispatch] = useReducer(reduce, INITIAL_STATE);
   const controllerRef = useRef<AbortController | null>(null);
+  const openingRef = useRef(false);
 
   const load = useCallback((section: NewsSectionKey) => {
     controllerRef.current?.abort();
@@ -113,6 +141,18 @@ export function useNewsViewModel(): NewsViewModel {
     [load, selectedSection]
   );
 
+  const openArticle = useCallback(async (article: Article): Promise<boolean> => {
+    if (openingRef.current) {
+      return true;
+    }
+    openingRef.current = true;
+    try {
+      return await openUrl(article.url);
+    } finally {
+      openingRef.current = false;
+    }
+  }, []);
+
   return {
     articles: state.articles,
     status,
@@ -120,5 +160,6 @@ export function useNewsViewModel(): NewsViewModel {
     selectedSection,
     selectSection,
     refresh,
+    openArticle,
   };
 }
