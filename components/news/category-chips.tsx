@@ -1,5 +1,7 @@
 import { Pressable, ScrollView, StyleSheet } from 'react-native';
 
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 
@@ -9,13 +11,16 @@ export type CategoryChipsProps<Key extends string = string> = {
   options: readonly CategoryChipOption<Key>[];
   selectedKey: Key;
   onSelect: (key: Key) => void;
+  horizontalMargin: number;
 };
 
 export function CategoryChips<Key extends string>({
   options,
   selectedKey,
   onSelect,
+  horizontalMargin,
 }: CategoryChipsProps<Key>) {
+  const insets = useSafeAreaInsets();
   const tint = useThemeColor({}, 'tint');
   const onTint = useThemeColor({}, 'onTint');
   const card = useThemeColor({}, 'card');
@@ -27,7 +32,10 @@ export function CategoryChips<Key extends string>({
       horizontal
       showsHorizontalScrollIndicator={false}
       style={styles.scrollView}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[
+        styles.content,
+        { paddingLeft: horizontalMargin + insets.left, paddingRight: horizontalMargin + insets.right },
+      ]}
     >
       {options.map((option) => (
         <Chip
@@ -96,7 +104,6 @@ const styles = StyleSheet.create({
     flexGrow: 0,
   },
   content: {
-    paddingHorizontal: 16,
     paddingVertical: 8,
     gap: 8,
     alignItems: 'center',

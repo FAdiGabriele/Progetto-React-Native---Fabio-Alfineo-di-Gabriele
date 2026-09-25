@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 import { useEffect, useMemo, useRef, type ReactElement } from 'react';
-import { Alert, StyleSheet } from 'react-native';
+import { Alert, StyleSheet, useWindowDimensions } from 'react-native';
 
 import { CategoryChips, type CategoryChipOption } from '@/components/news/category-chips';
 import { NewsList, type NewsListItem } from '@/components/news/news-list';
@@ -13,6 +13,7 @@ import { useI18n, type I18n } from '@/i18n/i18n-provider';
 import type { Article, NewsError } from '@/repositories/news-model';
 import { useNewsViewModel } from '@/screens/news/use-news-view-model';
 import { formatDateTime } from '@/utils/date';
+import { getNewsLayout } from '@/utils/layout';
 
 // Opening the article in the browser is not implemented yet.
 function noop() {}
@@ -34,6 +35,8 @@ function toListItem(article: Article, t: I18n['t'], locale: I18n['locale']): New
 export function NewsScreen() {
   const { articles, status, error, selectedSection, selectSection, refresh } = useNewsViewModel();
   const { t, locale } = useI18n();
+  const { width } = useWindowDimensions();
+  const { columns, horizontalMargin } = getNewsLayout(width);
 
   const screenOptions = useMemo(() => ({ title: t('news.title') }), [t]);
 
@@ -77,6 +80,8 @@ export function NewsScreen() {
     content = (
       <NewsList
         items={items}
+        columns={columns}
+        horizontalMargin={horizontalMargin}
         refreshing={status === 'refreshing'}
         onRefresh={refresh}
         emptyComponent={
@@ -89,7 +94,12 @@ export function NewsScreen() {
   return (
     <ThemedView style={styles.container}>
       <Stack.Screen options={screenOptions} />
-      <CategoryChips options={sectionOptions} selectedKey={selectedSection} onSelect={selectSection} />
+      <CategoryChips
+        options={sectionOptions}
+        selectedKey={selectedSection}
+        onSelect={selectSection}
+        horizontalMargin={horizontalMargin}
+      />
       {content}
     </ThemedView>
   );
