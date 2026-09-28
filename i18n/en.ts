@@ -2,12 +2,13 @@ import type { Dictionary } from '@/i18n/it';
 
 /** English texts of the interface, with the same keys as the Italian dictionary. */
 export const en: Dictionary = {
+  'app.name': 'News App',
   'news.title': 'News',
   'news.updatedAtTime': 'Updated at {time}',
   'news.updatedAtDate': 'Updated on {dateTime}',
   'news.refresh': 'Refresh',
-  'language.switch': 'Italiano',
-  'language.switchA11y': 'Switch to Italian',
+  'language.italian': 'Italian',
+  'language.english': 'English',
   'categories.italy': 'Italy',
   'categories.usa': 'USA',
   'states.loading': 'Loading news...',

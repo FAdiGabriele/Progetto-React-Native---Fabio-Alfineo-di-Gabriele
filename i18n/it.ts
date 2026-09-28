@@ -1,11 +1,12 @@
 /** Italian texts of the interface; its keys are the keys of every dictionary. */
 export const it = {
+  'app.name': 'News App',
   'news.title': 'Notizie',
   'news.updatedAtTime': 'Aggiornato alle {time}',
   'news.updatedAtDate': 'Aggiornato il {dateTime}',
   'news.refresh': 'Aggiorna',
-  'language.switch': 'English',
-  'language.switchA11y': "Passa all'inglese",
+  'language.italian': 'Italiano',
+  'language.english': 'Inglese',
   'categories.italy': 'Italia',
   'categories.usa': 'USA',
   'states.loading': 'Caricamento notizie...',

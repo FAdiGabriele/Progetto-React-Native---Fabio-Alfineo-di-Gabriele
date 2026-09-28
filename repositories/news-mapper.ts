@@ -56,23 +56,45 @@ function mapArticle(dto: unknown): Article | undefined {
   };
 }
 
+function normalizeForComparison(text: string): string {
+  return text.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+// Two articles are duplicates when they share a key: the same URL, or the same title from the same source.
+function getDuplicateKeys(article: Article): string[] {
+  return [
+    JSON.stringify(['url', article.id]),
+    JSON.stringify(['title', normalizeForComparison(article.sourceName), normalizeForComparison(article.title)]),
+  ];
+}
+
+// Keeps the candidates that are not duplicates of an existing article or of any earlier candidate.
+function withoutDuplicates(existing: readonly Article[], candidates: readonly Article[]): Article[] {
+  const seenKeys = new Set(existing.flatMap(getDuplicateKeys));
+  return candidates.filter((article) => {
+    const keys = getDuplicateKeys(article);
+    const isDuplicate = keys.some((key) => seenKeys.has(key));
+    keys.forEach((key) => seenKeys.add(key));
+    return !isDuplicate;
+  });
+}
+
 /**
  * Converts the article DTOs of a news section, already concatenated in request order,
  * into domain articles: invalid or removed articles are dropped, optional fields are
- * normalized and duplicate URLs keep their first occurrence.
+ * normalized and duplicates, by URL or by title and source, keep their first occurrence.
  */
 export function mapArticles(dtos: readonly NewsApiArticleDto[]): Article[] {
-  const seenUrls = new Set<string>();
-  const articles: Article[] = [];
+  const articles = dtos.map(mapArticle).filter((article) => article !== undefined);
+  return withoutDuplicates([], articles);
+}
 
-  for (const dto of dtos) {
-    const article = mapArticle(dto);
-    if (article === undefined || seenUrls.has(article.id)) {
-      continue;
-    }
-    seenUrls.add(article.id);
-    articles.push(article);
-  }
-
-  return articles;
+/**
+ * Appends to the list the articles of a later page that are not duplicates of an article
+ * already in the list or of an earlier one of the page; without additions it returns the
+ * same list.
+ */
+export function appendArticles(current: Article[], incoming: readonly Article[]): Article[] {
+  const added = withoutDuplicates(current, incoming);
+  return added.length === 0 ? current : [...current, ...added];
 }

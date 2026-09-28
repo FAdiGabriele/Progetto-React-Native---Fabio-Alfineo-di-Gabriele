@@ -1,4 +1,5 @@
 import { Stack } from 'expo-router';
+import Head from 'expo-router/head';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { Alert, Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
 
@@ -10,16 +11,31 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
+import { ImageSwitch, type ImageSwitchOption } from '@/components/ui/image-switch';
 import { LoadingState } from '@/components/ui/loading-state';
 import { MessageBanner } from '@/components/ui/message-banner';
 import { TextButton } from '@/components/ui/text-button';
 import { NEWS_SECTIONS, type NewsSectionKey } from '@/constants/news-sections';
 import { useI18n, type I18n } from '@/i18n/i18n-provider';
 import type { TranslationKey } from '@/i18n/it';
+import type { Language } from '@/repositories/language-model';
 import type { Article, NewsError } from '@/repositories/news-model';
 import { useNewsViewModel } from '@/screens/news/use-news-view-model';
 import { formatDateTime, formatTime, isToday } from '@/utils/date';
 import { getNewsLayout } from '@/utils/layout';
+
+const LANGUAGE_OPTIONS: readonly {
+  key: Language;
+  image: ImageSwitchOption['image'];
+  labelKey: TranslationKey;
+}[] = [
+  { key: 'it', image: require('@/assets/images/flags/italy.png'), labelKey: 'language.italian' },
+  {
+    key: 'en',
+    image: require('@/assets/images/flags/united-kingdom.png'),
+    labelKey: 'language.english',
+  },
+];
 
 function toListItem(
   article: Article,
@@ -70,25 +86,31 @@ export function NewsScreen() {
     loadMore,
     openArticle,
   } = useNewsViewModel();
-  const { t, locale, toggleLanguage } = useI18n();
+  const { language, t, locale, toggleLanguage } = useI18n();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { columns, horizontalMargin } = getNewsLayout(width);
   // On web there is no pull-to-refresh gesture and Alert.alert does nothing: a button and a banner take their place.
   const isWeb = Platform.OS === 'web';
 
+  const languageOptions = useMemo<ImageSwitchOption<Language>[]>(
+    () =>
+      LANGUAGE_OPTIONS.map(({ key, image, labelKey }) => ({
+        key,
+        image,
+        accessibilityLabel: t(labelKey),
+      })),
+    [t]
+  );
+
   const screenOptions = useMemo(
     () => ({
       title: t('news.title'),
       headerRight: () => (
-        <TextButton
-          title={t('language.switch')}
-          accessibilityLabel={t('language.switchA11y')}
-          onPress={toggleLanguage}
-        />
+        <ImageSwitch options={languageOptions} selectedKey={language} onSelect={toggleLanguage} />
       ),
     }),
-    [t, toggleLanguage]
+    [language, languageOptions, t, toggleLanguage]
   );
 
   const sectionOptions = useMemo<CategoryChipOption<NewsSectionKey>[]>(
@@ -98,25 +120,21 @@ export function NewsScreen() {
 
   // Non-blocking notices: a banner on web, an alert elsewhere.
   const [noticeKey, setNoticeKey] = useState<TranslationKey | null>(null);
+  const alertNotice = useCallback(
+    (key: TranslationKey) => Alert.alert(t(key), undefined, [{ text: t('states.close') }]),
+    [t]
+  );
   const showNotice = useCallback(
     (key: TranslationKey) => {
       if (isWeb) {
         setNoticeKey(key);
       } else {
-        Alert.alert(t(key), undefined, [{ text: t('states.close') }]);
+        alertNotice(key);
       }
     },
-    [isWeb, t]
+    [alertNotice, isWeb]
   );
   const hideNotice = useCallback(() => setNoticeKey(null), []);
-  useEffect(() => {
-    if (status === 'success') {
-      setNoticeKey(null);
-    }
-  }, [status]);
-  useEffect(() => {
-    setNoticeKey(null);
-  }, [selectedSection]);
 
   const handleArticlePress = useCallback(
     (article: Article) => {
@@ -141,17 +159,32 @@ export function NewsScreen() {
   const errorMessage = error === null ? null : t(`errors.${error.kind}`);
   const updatedAtLabel = toUpdatedAtLabel(updatedAt, t, locale);
 
-  // With articles on screen a failed load is reported once, when its error appears.
-  const reportedErrorRef = useRef<NewsError | null>(null);
+  // With articles on screen a failed load is reported once, when its error appears; a successful
+  // load or another section hides the banner. The banner is updated while rendering, the alert
+  // after the commit.
+  const [lastLoad, setLastLoad] = useState({ status, selectedSection, error });
+  const isNewError = error !== null && error !== lastLoad.error;
+  if (status !== lastLoad.status || selectedSection !== lastLoad.selectedSection || isNewError) {
+    setLastLoad({ status, selectedSection, error: error ?? lastLoad.error });
+    if (isWeb && hasArticles && error !== null && isNewError) {
+      setNoticeKey(`errors.${error.kind}`);
+    } else if (
+      selectedSection !== lastLoad.selectedSection ||
+      (status !== lastLoad.status && status === 'success')
+    ) {
+      setNoticeKey(null);
+    }
+  }
+  const alertedErrorRef = useRef<NewsError | null>(null);
   useEffect(() => {
-    if (error === null || error === reportedErrorRef.current) {
+    if (isWeb || error === null || error === alertedErrorRef.current) {
       return;
     }
-    reportedErrorRef.current = error;
+    alertedErrorRef.current = error;
     if (hasArticles) {
-      showNotice(`errors.${error.kind}`);
+      alertNotice(`errors.${error.kind}`);
     }
-  }, [error, hasArticles, showNotice]);
+  }, [alertNotice, error, hasArticles, isWeb]);
 
   const isLoading = status === 'idle' || status === 'loading';
   const showsList = !isLoading && !(status === 'error' && !hasArticles);
@@ -188,6 +221,9 @@ export function NewsScreen() {
   return (
     <ThemedView style={styles.container}>
       <Stack.Screen options={screenOptions} />
+      <Head>
+        <title>{t('app.name')}</title>
+      </Head>
       {(updatedAtLabel !== undefined || showsRefreshButton) && (
         <View
           style={[

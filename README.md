@@ -4,28 +4,29 @@ A React Native app, built with [Expo](https://expo.dev), that shows the main new
 
 ## Features
 
-- **Two categories**, chosen with a chip bar under the header: **Italia** (the top headlines of la Repubblica and Il Sole 24 Ore, followed by the latest 10 ANSA articles) and **USA** (the top headlines of the United States). "Italia" is selected at start; with the English interface the chips read "Italy" and "USA".
+- **Two categories**, chosen with a chip bar under the header: **Italia** (the top headlines of la Repubblica and Il Sole 24 Ore, followed by up to 10 of the latest ANSA articles) and **USA** (the top headlines of the United States). "Italia" is selected at start; with the English interface the chips read "Italy" and "USA".
 - **One card per article**, with image (or a placeholder), source, title, description, publication date and author. A tap opens the article in the in-app browser, or in a new tab on web.
 - **Pull-to-refresh** on Android and iOS. On web, where the gesture does not exist, a **Refresh** button ("Aggiorna") next to the last update time reloads the list.
-- **More news at the end of the list**: scrolling to the bottom loads the next page of the requests that still have results. In practice this adds 10 more ANSA articles at a time in "Italia" and does nothing in "USA".
+- **More news at the end of the list**: scrolling to the bottom loads the next page of the requests that still have results. In practice this adds up to 10 more ANSA articles at a time in "Italia" and does nothing in "USA".
 - **Last update time** under the header: the time when the list was received ("Aggiornato alle 14:30"), or date and time when the list is from another day.
 - **Saved list**: the first page of the last list received for each category is kept on the device (the articles added at the end of the list are not saved). When loading fails and there is nothing else to show, for example when the app is opened without a network connection, the saved list appears with a non-blocking message and the time it was saved.
 - **Mobile and desktop layout**: one card per row on phones; in windows at least 768 points wide (CSS pixels on web; tablets too) a grid with at least three cards per row, with one more column whenever every card stays at least 320 points wide.
-- **Italian and English interface**, switched with the button in the header ("English" / "Italiano") and remembered across restarts. Dates follow the language.
-- **Light and dark theme**, following the system setting, and screen reader labels on cards, chips and buttons.
+- **Italian and English interface**, chosen with the two flags in the header, Italy and the United Kingdom: the flag of the current language is highlighted and a tap on the other one switches language. The choice is remembered across restarts and dates follow the language.
+- **Light and dark theme**, following the system setting, and screen reader labels on cards, chips, buttons and language flags (read as "Italiano" and "Inglese", or "Italian" and "English", with the current language selected).
+- **App name and icon in the browser tab** on web: the tab always shows "News App" and the newspaper icon of the app, whatever the language and the category.
 - Loading, error and empty states, the last two with a "Retry" button ("Riprova"); a 10-second timeout on every request; requests cancelled when a new load starts.
 
 ### Known limits of the Italian sources
 
-- NewsAPI's `top-headlines` returns at most 10 headlines per outlet, so "Italia" starts with at most 20 headlines followed by 10 ANSA articles; more ANSA articles are added at the end of the list.
+- NewsAPI's `top-headlines` returns at most 10 headlines per outlet, so "Italia" starts with at most 20 headlines followed by up to 10 ANSA articles; more ANSA articles are added at the end of the list.
 - Il Sole 24 Ore often returns the image URL as the string `"null"`: those cards show the placeholder.
-- ANSA publishes the same piece on different URLs for its regional editions: duplicates are removed only when the URL is the same, so both versions can appear in the list.
+- ANSA publishes the same piece on different URLs for its regional editions: articles with the same title and the same source appear only once, as the first one received, which can be a regional edition. An edition with a different title remains a separate card.
 - Google News Italia is excluded on purpose: its items point to redirect links and do not name the original outlet or the author.
 
 ## Prerequisites
 
 - [Node.js](https://nodejs.org) LTS and npm.
-- [Expo Go](https://expo.dev/go) for Expo SDK 54 on an Android or iOS device, or an Android emulator or iOS simulator. The app uses no custom native modules.
+- [Expo Go](https://expo.dev/go) for Expo SDK 57 on an Android or iOS device (the version in the app stores), or an Android emulator or iOS simulator. The app uses no custom native modules.
 - A free [NewsAPI](https://newsapi.org/register) account and its API key.
 
 ## Configuration
@@ -92,7 +93,7 @@ app/            Expo Router routes: root layout and the "/" route, which only sh
 services/       Service layer and DTOs: NewsAPI client, fixture mode, saved list and language storage; fixtures/ with real responses
 repositories/   Repository layer and Model: news repository (sections, pages, saved list), mapper from DTO to Model, language repository
 screens/news/   The news screen and its ViewModel (a custom hook)
-components/     UI components that receive everything through props: card, list, image, category chips, states, text button, banner
+components/     UI components that receive everything through props: card, list, image, category chips, states, text button, banner, image switch (the language flags)
 i18n/           Italian and English dictionaries and the language provider
 constants/      Configuration, news sections and theme
 hooks/          Theme hooks

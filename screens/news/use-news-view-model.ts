@@ -3,6 +3,7 @@ import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { Linking, Platform } from 'react-native';
 
 import { NEWS_SECTIONS, type NewsSectionKey } from '@/constants/news-sections';
+import { appendArticles } from '@/repositories/news-mapper';
 import {
   NewsError,
   type Article,
@@ -68,13 +69,6 @@ const INITIAL_STATE: State = {
   selectedSection: INITIAL_SECTION,
 };
 
-// Articles of a later page whose id is already in the list are dropped; without additions the list is unchanged.
-function appendNew(articles: Article[], next: Article[]): Article[] {
-  const ids = new Set(articles.map((article) => article.id));
-  const added = next.filter((article) => !ids.has(article.id));
-  return added.length === 0 ? articles : [...articles, ...added];
-}
-
 function reduce(state: State, action: Action): State {
   switch (action.type) {
     case 'sectionSelected':
@@ -116,7 +110,7 @@ function reduce(state: State, action: Action): State {
     case 'loadMoreSucceeded':
       return {
         ...state,
-        articles: appendNew(state.articles, action.articles),
+        articles: appendArticles(state.articles, action.articles),
         status: 'success',
         error: null,
         cursor: action.cursor,
