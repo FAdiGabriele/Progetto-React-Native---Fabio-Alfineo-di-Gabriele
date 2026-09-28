@@ -3,6 +3,7 @@ export const it = {
   'news.title': 'Notizie',
   'news.updatedAtTime': 'Aggiornato alle {time}',
   'news.updatedAtDate': 'Aggiornato il {dateTime}',
+  'news.refresh': 'Aggiorna',
   'language.switch': 'English',
   'language.switchA11y': "Passa all'inglese",
   'categories.italy': 'Italia',

@@ -5,6 +5,7 @@ export const en: Dictionary = {
   'news.title': 'News',
   'news.updatedAtTime': 'Updated at {time}',
   'news.updatedAtDate': 'Updated on {dateTime}',
+  'news.refresh': 'Refresh',
   'language.switch': 'Italiano',
   'language.switchA11y': 'Switch to Italian',
   'categories.italy': 'Italy',
