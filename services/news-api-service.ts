@@ -3,12 +3,14 @@ import {
   NEWS_API_BASE_URL,
   NEWS_API_KEY,
   REQUEST_TIMEOUT_MS,
+  USE_NEWS_FIXTURES,
 } from '@/constants/config';
 import type {
   NewsApiPageDto,
   NewsApiRequestDto,
   NewsApiResponseDto,
 } from '@/services/news-api-dto';
+import { getFixturePage } from '@/services/news-fixture-service';
 
 export type NewsApiServiceErrorReason =
   | 'missingKey'
@@ -112,6 +114,24 @@ async function sendWithRetry(url: string, signal?: AbortSignal): Promise<RawResp
   }
 }
 
+// The error fetch rejects with when its signal is already aborted.
+function createAbortError(): Error {
+  const error = new Error('The operation was aborted.');
+  error.name = 'AbortError';
+  return error;
+}
+
+function getFixtureArticles(request: NewsApiRequestDto, signal?: AbortSignal): NewsApiPageDto {
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
+  const page = getFixturePage(request);
+  if (page === undefined) {
+    throw new NewsApiServiceError('invalidResponse', { message: 'No fixture for the request' });
+  }
+  return page;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -154,12 +174,16 @@ function parseResponse({ status, ok, body }: RawResponse): NewsApiPageDto {
 /**
  * Fetches one page of a NewsAPI request: its articles and the total number of results.
  * Rejects with a NewsApiServiceError, or with the fetch abort error unchanged when the
- * caller aborts `signal`.
+ * caller aborts `signal`. In fixture mode the page comes from `services/fixtures/`,
+ * without any request and without checking the key.
  */
 export async function getArticles(
   request: NewsApiRequestDto,
   signal?: AbortSignal
 ): Promise<NewsApiPageDto> {
+  if (USE_NEWS_FIXTURES) {
+    return getFixtureArticles(request, signal);
+  }
   if (!IS_NEWS_API_KEY_CONFIGURED) {
     throw new NewsApiServiceError('missingKey');
   }
