@@ -18,7 +18,7 @@ export function TextButton({ title, accessibilityLabel, onPress, loading = false
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      accessibilityState={{ busy: loading }}
+      aria-busy={loading}
       disabled={loading}
       onPress={onPress}
       style={({ pressed }) => [styles.button, pressed && styles.pressed]}

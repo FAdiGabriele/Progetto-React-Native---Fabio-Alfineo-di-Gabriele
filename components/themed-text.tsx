@@ -17,7 +17,7 @@ export function ThemedText({
 }: ThemedTextProps) {
   const color = useThemeColor(
     { light: lightColor, dark: darkColor },
-    type === 'secondary' ? 'textSecondary' : 'text'
+    type === 'link' ? 'tint' : type === 'secondary' ? 'textSecondary' : 'text'
   );
 
   return (
@@ -59,7 +59,6 @@ const styles = StyleSheet.create({
   link: {
     lineHeight: 30,
     fontSize: 16,
-    color: '#0a7ea4',
   },
   secondary: {
     fontSize: 13,

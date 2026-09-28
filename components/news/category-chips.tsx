@@ -75,7 +75,7 @@ function Chip({ label, selected, onPress, tint, onTint, card, border, text }: Ch
       hitSlop={4}
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityState={{ selected }}
+      aria-selected={selected}
       onPress={onPress}
       style={({ pressed }) => [
         styles.chip,
