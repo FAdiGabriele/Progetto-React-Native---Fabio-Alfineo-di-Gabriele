@@ -100,9 +100,9 @@ export function useNewsViewModel(): NewsViewModel {
 
     dispatch({ type: 'loadStarted' });
     getSectionArticles(section, controller.signal).then(
-      (articles) => {
+      (page) => {
         if (isCurrent()) {
-          dispatch({ type: 'loadSucceeded', articles });
+          dispatch({ type: 'loadSucceeded', articles: page.articles });
         }
       },
       (error: unknown) => {

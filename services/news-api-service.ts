@@ -5,7 +5,7 @@ import {
   REQUEST_TIMEOUT_MS,
 } from '@/constants/config';
 import type {
-  NewsApiArticleDto,
+  NewsApiPageDto,
   NewsApiRequestDto,
   NewsApiResponseDto,
 } from '@/services/news-api-dto';
@@ -61,7 +61,8 @@ function buildUrl(request: NewsApiRequestDto): string {
   } else {
     query = `sources=${encodeList(request.sources)}`;
   }
-  return `${NEWS_API_BASE_URL}/${request.endpoint}?${query}&pageSize=${encodeURIComponent(request.pageSize)}`;
+  const page = request.page === undefined ? '' : `&page=${encodeURIComponent(request.page)}`;
+  return `${NEWS_API_BASE_URL}/${request.endpoint}?${query}&pageSize=${encodeURIComponent(request.pageSize)}${page}`;
 }
 
 async function send(url: string, signal?: AbortSignal): Promise<RawResponse> {
@@ -116,7 +117,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isOkResponse(value: unknown): value is OkResponseDto {
-  return isRecord(value) && value.status === 'ok' && Array.isArray(value.articles);
+  return (
+    isRecord(value) &&
+    value.status === 'ok' &&
+    typeof value.totalResults === 'number' &&
+    Array.isArray(value.articles)
+  );
 }
 
 function parseJson(body: string): unknown {
@@ -127,7 +133,7 @@ function parseJson(body: string): unknown {
   }
 }
 
-function parseResponse({ status, ok, body }: RawResponse): NewsApiArticleDto[] {
+function parseResponse({ status, ok, body }: RawResponse): NewsApiPageDto {
   const parsed = parseJson(body);
   if (isRecord(parsed) && parsed.status === 'error') {
     throw new NewsApiServiceError('http', {
@@ -140,19 +146,20 @@ function parseResponse({ status, ok, body }: RawResponse): NewsApiArticleDto[] {
     throw new NewsApiServiceError('http', { status });
   }
   if (isOkResponse(parsed)) {
-    return parsed.articles;
+    return { totalResults: parsed.totalResults, articles: parsed.articles };
   }
   throw new NewsApiServiceError('invalidResponse', { status });
 }
 
 /**
- * Fetches the articles of a NewsAPI request. Rejects with a NewsApiServiceError,
- * or with the fetch abort error unchanged when the caller aborts `signal`.
+ * Fetches one page of a NewsAPI request: its articles and the total number of results.
+ * Rejects with a NewsApiServiceError, or with the fetch abort error unchanged when the
+ * caller aborts `signal`.
  */
 export async function getArticles(
   request: NewsApiRequestDto,
   signal?: AbortSignal
-): Promise<NewsApiArticleDto[]> {
+): Promise<NewsApiPageDto> {
   if (!IS_NEWS_API_KEY_CONFIGURED) {
     throw new NewsApiServiceError('missingKey');
   }

@@ -2,11 +2,12 @@
  * Central configuration for the NewsAPI integration.
  *
  * This is the only file to edit to change the base URL, the number of
- * articles fetched by each top-headlines request, or the request timeout.
+ * articles fetched by each top-headlines request, the maximum number of
+ * results asked to a request across its pages, or the request timeout.
  * The service reads the base URL, the timeout and the API key; the news
- * sections list reads the page size. The sections and the parameters of
- * their requests, such as the country, are defined in
- * `constants/news-sections.ts`.
+ * sections list reads the page size; the repository reads the maximum
+ * number of results. The sections and the parameters of their requests,
+ * such as the country, are defined in `constants/news-sections.ts`.
  *
  * The API key comes from the `.env` file (`EXPO_PUBLIC_NEWS_API_KEY`
  * variable, template in `.env.example`); restart the dev server after
@@ -20,6 +21,12 @@ export const NEWS_API_BASE_URL = 'https://newsapi.org/v2';
 
 /** Articles per top-headlines request, read by the news sections list; NewsAPI's max is 100. */
 export const NEWS_PAGE_SIZE = 50;
+
+/**
+ * Maximum number of results per request across its pages, read by the repository:
+ * the free plan serves no more, so no further page is asked beyond this limit.
+ */
+export const NEWS_MAX_RESULTS = 100;
 
 /** Request timeout in milliseconds, read by the service. */
 export const REQUEST_TIMEOUT_MS = 10000;
