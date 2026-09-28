@@ -30,6 +30,7 @@ You can start developing by editing the files inside the **app** directory. This
 ```bash
 npm run lint       # ESLint on the whole project
 npx tsc --noEmit   # TypeScript type check
+npm test           # Unit tests (Jest with the jest-expo preset)
 ```
 
 ## Learn more
