@@ -61,3 +61,11 @@ export const Fonts = Platform.select({
     mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
   },
 });
+
+export const Layout = {
+  desktopMinWidth: 768,
+  horizontalMargin: { mobile: 24, desktop: 32 },
+  cardGap: { mobile: 12, desktop: 16 },
+  minCardWidth: 320,
+  minColumns: 3,
+};
