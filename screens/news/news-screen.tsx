@@ -105,7 +105,7 @@ export function NewsScreen() {
 
   const screenOptions = useMemo(
     () => ({
-      title: t('news.title'),
+      title: t('app.name'),
       headerRight: () => (
         <ImageSwitch options={languageOptions} selectedKey={language} onSelect={toggleLanguage} />
       ),

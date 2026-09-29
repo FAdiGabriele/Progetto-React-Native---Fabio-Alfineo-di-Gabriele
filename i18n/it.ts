@@ -1,7 +1,6 @@
 /** Italian texts of the interface; its keys are the keys of every dictionary. */
 export const it = {
   'app.name': 'News App',
-  'news.title': 'Notizie',
   'news.updatedAtTime': 'Aggiornato alle {time}',
   'news.updatedAtDate': 'Aggiornato il {dateTime}',
   'news.refresh': 'Aggiorna',

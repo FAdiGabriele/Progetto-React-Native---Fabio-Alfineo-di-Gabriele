@@ -88,6 +88,7 @@ export function NewsList({
 }: NewsListProps) {
   const insets = useSafeAreaInsets();
   const tint = useThemeColor({}, 'tint');
+  const card = useThemeColor({}, 'card');
   const isGrid = columns > 1;
   const cells = useMemo(() => toCells(items, columns), [items, columns]);
 
@@ -109,7 +110,14 @@ export function NewsList({
       onEndReached={onEndReached}
       onEndReachedThreshold={0.5}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={tint} colors={[tint]} />
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={tint}
+          colors={[tint]}
+          // By default Android draws the indicator on a near-white circle, where a white tint disappears.
+          progressBackgroundColor={card}
+        />
       }
       style={styles.list}
       contentContainerStyle={[
