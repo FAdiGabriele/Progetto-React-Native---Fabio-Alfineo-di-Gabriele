@@ -11,15 +11,15 @@ export type Article = {
   publishedAt?: Date; // absent when the API value cannot be parsed
 };
 
-/** One page of a news section, with the cursor of the next page when some request has more. */
+/** One page of a news section, with the cursor of the next page of its more-news request. */
 export type NewsPage = {
   articles: Article[];
-  next?: NewsPageCursor;
+  next?: NewsPageCursor; // absent when the section has no more-news request or has exhausted it
 };
 
 /** Opaque for view models and screens: only the repository builds and reads it. */
 export type NewsPageCursor = {
-  pages: (number | undefined)[]; // per request of the section, in order: the next page, or undefined when exhausted
+  page: number; // next page of the more-news request of the section, from 1
 };
 
 /** Last saved list of a news section and when it was saved. */

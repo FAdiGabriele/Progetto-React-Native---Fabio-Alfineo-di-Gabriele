@@ -8,19 +8,21 @@ import {
   type NewsPageCursor,
   type SavedNews,
 } from '@/repositories/news-model';
-import type { NewsApiArticleDto, NewsApiRequestDto } from '@/services/news-api-dto';
+import type { NewsApiArticleDto, NewsApiPageDto, NewsApiRequestDto } from '@/services/news-api-dto';
 import { getArticles, NewsApiServiceError } from '@/services/news-api-service';
 import { readEntry, writeEntry } from '@/services/news-cache-service';
 import { parseIsoDate } from '@/utils/date';
 
+type NewsSection = (typeof NEWS_SECTIONS)[number];
+
 const FIRST_PAGE = 1;
 
-function getSectionRequests(sectionKey: NewsSectionKey): readonly NewsApiRequestDto[] {
+function getSection(sectionKey: NewsSectionKey): NewsSection {
   const section = NEWS_SECTIONS.find((candidate) => candidate.key === sectionKey);
   if (section === undefined) {
     throw new Error(`Unknown news section: ${sectionKey}`);
   }
-  return section.requests;
+  return section;
 }
 
 function toHttpErrorKind(status: number | undefined): NewsErrorKind {
@@ -68,6 +70,11 @@ function isCancellation(error: unknown, signal?: AbortSignal): boolean {
   return signal?.aborted === true || (error instanceof Error && error.name === 'AbortError');
 }
 
+// A cancellation is rethrown unchanged; any other error becomes a NewsError.
+function toThrowable(error: unknown, signal?: AbortSignal): unknown {
+  return isCancellation(error, signal) ? error : toNewsError(error);
+}
+
 // The first page sends no page parameter.
 function withPage(request: NewsApiRequestDto, page: number): NewsApiRequestDto {
   return page === FIRST_PAGE ? request : { ...request, page };
@@ -86,57 +93,69 @@ async function saveEntry(sectionKey: string, articles: NewsApiArticleDto[]): Pro
   }
 }
 
+async function getFirstPage(section: NewsSection, signal?: AbortSignal): Promise<NewsPage> {
+  const results = await Promise.allSettled(
+    section.requests.map((request) => getArticles(request, signal))
+  );
+
+  const failures = results.filter((result) => result.status === 'rejected');
+  if (failures.length > 0 && failures.length === results.length) {
+    throw toThrowable(failures[0].reason, signal);
+  }
+
+  const dtos = results.flatMap((result) =>
+    result.status === 'fulfilled' ? result.value.articles : []
+  );
+  const articles = mapArticles(dtos);
+  if (articles.length > 0) {
+    await saveEntry(section.key, dtos);
+  }
+
+  return section.moreRequest === undefined ? { articles } : { articles, next: { page: FIRST_PAGE } };
+}
+
+async function getMorePage(
+  section: NewsSection,
+  cursor: NewsPageCursor,
+  signal?: AbortSignal
+): Promise<NewsPage> {
+  const request = section.moreRequest;
+  if (request === undefined) {
+    return { articles: [] };
+  }
+
+  let page: NewsApiPageDto;
+  try {
+    page = await getArticles(withPage(request, cursor.page), signal);
+  } catch (error) {
+    throw toThrowable(error, signal);
+  }
+
+  const articles = mapArticles(page.articles);
+  return hasMorePages(cursor.page, request.pageSize, page.totalResults)
+    ? { articles, next: { page: cursor.page + 1 } }
+    : { articles };
+}
+
 /**
- * Fetches one page of a news section: without a cursor the first page of every request
- * of the section, with a cursor the page it indicates for each request that still has
- * results. The requests run in parallel with the same `signal` and the articles of the
- * successful ones are merged in section order; a failed request keeps its page in the
- * cursor, so a later call retries it. Rejects with a NewsError only when every request
- * asked fails, translating the error of the first one; a cancellation requested through
- * `signal` is rethrown unchanged. A first page with at least one article is saved as the
- * last list of the section before being returned, ignoring a failed save.
+ * Fetches one page of a news section. Without a cursor it fetches the first page: the
+ * requests of the section run in parallel with the same `signal` and the articles of the
+ * successful ones are merged in section order; it rejects with a NewsError only when every
+ * request fails, translating the error of the first one, and a first page with at least one
+ * article is saved as the last list of the section before being returned, ignoring a failed
+ * save. The cursor of the result points to page 1 of the more-news request of the section,
+ * when it has one. With a cursor it fetches that page of the more-news request alone and
+ * returns the cursor of the following page, or none when the request is exhausted; a failed
+ * request rejects with its NewsError, so a later call can retry the same page. A cancellation
+ * requested through `signal` is rethrown unchanged.
  */
 export async function getSectionArticles(
   sectionKey: NewsSectionKey,
   signal?: AbortSignal,
   cursor?: NewsPageCursor
 ): Promise<NewsPage> {
-  const requests = getSectionRequests(sectionKey);
-  const pages = requests.map((_, index) => (cursor === undefined ? FIRST_PAGE : cursor.pages[index]));
-  const asked = pages.flatMap((page, index) => (page === undefined ? [] : [{ index, page }]));
-
-  const results = await Promise.allSettled(
-    asked.map(({ index, page }) => getArticles(withPage(requests[index], page), signal))
-  );
-
-  const failures = results.filter((result) => result.status === 'rejected');
-  if (failures.length > 0 && failures.length === results.length) {
-    const firstError: unknown = failures[0].reason;
-    if (isCancellation(firstError, signal)) {
-      throw firstError;
-    }
-    throw toNewsError(firstError);
-  }
-
-  const nextPages = [...pages];
-  asked.forEach(({ index, page }, position) => {
-    const result = results[position];
-    if (result.status === 'fulfilled') {
-      const { pageSize } = requests[index];
-      nextPages[index] = hasMorePages(page, pageSize, result.value.totalResults) ? page + 1 : undefined;
-    }
-  });
-
-  const dtos = results.flatMap((result) =>
-    result.status === 'fulfilled' ? result.value.articles : []
-  );
-  const articles = mapArticles(dtos);
-  if (cursor === undefined && articles.length > 0) {
-    await saveEntry(sectionKey, dtos);
-  }
-
-  const hasNext = nextPages.some((page) => page !== undefined);
-  return hasNext ? { articles, next: { pages: nextPages } } : { articles };
+  const section = getSection(sectionKey);
+  return cursor === undefined ? getFirstPage(section, signal) : getMorePage(section, cursor, signal);
 }
 
 /**

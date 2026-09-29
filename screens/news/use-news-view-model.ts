@@ -25,7 +25,7 @@ export type NewsViewModel = {
    * without data.
    */
   updatedAt?: Date;
-  /** Whether some request of the section still has pages to load. */
+  /** Whether the section still has more news to load at the end of the list. */
   hasMore: boolean;
   selectSection: (section: NewsSectionKey) => void;
   refresh: () => void;

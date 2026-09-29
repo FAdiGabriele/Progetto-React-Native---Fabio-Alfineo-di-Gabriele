@@ -1,4 +1,6 @@
 import everythingAnsa from '@/services/fixtures/everything-ansa.json';
+import everythingItaly from '@/services/fixtures/everything-italy.json';
+import everythingUs from '@/services/fixtures/everything-us.json';
 import topHeadlinesItaly from '@/services/fixtures/top-headlines-italy.json';
 import topHeadlinesUs from '@/services/fixtures/top-headlines-us.json';
 import type { NewsApiPageDto, NewsApiRequestDto } from '@/services/news-api-dto';
@@ -24,6 +26,47 @@ const FIXTURES: readonly Fixture[] = [
   {
     request: { endpoint: 'everything', domains: ['ansa.it'], language: 'it', sortBy: 'publishedAt' },
     page: everythingAnsa,
+  },
+  {
+    request: {
+      endpoint: 'everything',
+      domains: ['ansa.it', 'repubblica.it', 'ilsole24ore.com'],
+      language: 'it',
+      sortBy: 'publishedAt',
+    },
+    page: everythingItaly,
+  },
+  {
+    request: {
+      endpoint: 'everything',
+      domains: [
+        'apnews.com',
+        'reuters.com',
+        'cnn.com',
+        'foxnews.com',
+        'nbcnews.com',
+        'abcnews.go.com',
+        'cbsnews.com',
+        'msnbc.com',
+        'npr.org',
+        'cnbc.com',
+        'washingtonpost.com',
+        'wsj.com',
+        'usatoday.com',
+        'bloomberg.com',
+        'politico.com',
+        'thehill.com',
+        'time.com',
+        'newsweek.com',
+        'axios.com',
+        'businessinsider.com',
+        'techcrunch.com',
+        'theverge.com',
+      ],
+      language: 'en',
+      sortBy: 'publishedAt',
+    },
+    page: everythingUs,
   },
 ];
 

@@ -1,6 +1,8 @@
 import { appendArticles, mapArticles } from '@/repositories/news-mapper';
 import type { Article } from '@/repositories/news-model';
 import everythingAnsa from '@/services/fixtures/everything-ansa.json';
+import everythingItaly from '@/services/fixtures/everything-italy.json';
+import everythingUs from '@/services/fixtures/everything-us.json';
 import topHeadlinesItaly from '@/services/fixtures/top-headlines-italy.json';
 import topHeadlinesUs from '@/services/fixtures/top-headlines-us.json';
 import type { NewsApiArticleDto } from '@/services/news-api-dto';
@@ -109,6 +111,17 @@ describe('mapArticles with the section fixtures', () => {
     expect(everythingAnsa.articles).toHaveLength(10);
     expect(articles).toHaveLength(7);
     expect(new Set(articles.map((article) => article.title)).size).toBe(7);
+  });
+
+  it('maps the 20 articles of the Italy more-news page to 16, without the second editions of four ANSA pieces', () => {
+    const articles = mapArticles(everythingItaly.articles);
+
+    expect(everythingItaly.articles).toHaveLength(20);
+    expect(articles).toHaveLength(16);
+    expect(new Set(articles.map((article) => article.title)).size).toBe(16);
+    expect(everythingItaly.articles.slice(0, 10).map((dto) => dto.url)).toEqual(
+      everythingAnsa.articles.map((dto) => dto.url)
+    );
   });
 });
 
@@ -450,5 +463,36 @@ describe('appendArticles', () => {
     expect(firstPage).toHaveLength(25);
     expect(nextPage).toHaveLength(3);
     expect(appendArticles(firstPage, nextPage)).toEqual(mapArticles(italySection));
+  });
+
+  it('appends 9 of the 20 articles of the Italy more-news page to the 27 of the first page', () => {
+    const firstPage = mapArticles(italySection);
+    const morePage = mapArticles(everythingItaly.articles);
+    const appended = appendArticles(firstPage, morePage);
+    // The first 10 articles of the page are those of everything-ansa.json, already in the list;
+    // among the other 10, the Frosinone piece has two editions with the same title.
+    const expectedAdded = everythingItaly.articles
+      .slice(10)
+      .filter((dto, index, page) => page.findIndex((other) => other.title === dto.title) === index)
+      .map((dto) => dto.url);
+
+    expect(firstPage).toHaveLength(27);
+    expect(morePage).toHaveLength(16);
+    expect(expectedAdded).toHaveLength(9);
+    expect(appended).toHaveLength(36);
+    expect(appended.slice(0, 27)).toEqual(firstPage);
+    expect(appended.slice(27).map((article) => article.id)).toEqual(expectedAdded);
+    expect(appended.slice(27).filter((article) => article.title.startsWith('Frosinone'))).toHaveLength(1);
+  });
+
+  it('appends all the 20 articles of the USA more-news page to the 35 of the first page', () => {
+    const firstPage = mapArticles(usaSection);
+    const morePage = mapArticles(everythingUs.articles);
+    const appended = appendArticles(firstPage, morePage);
+
+    expect(morePage).toHaveLength(20);
+    expect(appended).toHaveLength(55);
+    expect(appended.slice(0, 35)).toEqual(firstPage);
+    expect(appended.slice(35).map((article) => article.id)).toEqual(everythingUs.articles.map((dto) => dto.url));
   });
 });

@@ -7,7 +7,7 @@ A React Native app, built with [Expo](https://expo.dev), that shows the main new
 - **Two categories**, chosen with a chip bar under the header: **Italia** (the top headlines of la Repubblica and Il Sole 24 Ore, followed by up to 10 of the latest ANSA articles) and **USA** (the top headlines of the United States). "Italia" is selected at start; with the English interface the chips read "Italy" and "USA".
 - **One card per article**, with image (or a placeholder), source, title, description, publication date and author. A tap opens the article in the in-app browser, or in a new tab on web.
 - **Pull-to-refresh** on Android and iOS. On web, where the gesture does not exist, a **Refresh** button ("Aggiorna") next to the last update time reloads the list.
-- **More news at the end of the list**: scrolling to the bottom loads the next page of the requests that still have results. In practice this adds up to 10 more ANSA articles at a time in "Italia" and does nothing in "USA".
+- **More news at the end of the list**: every time the scrolling reaches the bottom, the app loads one page of 20 articles from NewsAPI's `everything` on all the outlets of the category (ANSA, la Repubblica and Il Sole 24 Ore in "Italia", the US outlets listed in `constants/news-sections.ts` in "USA"), sorted by date and appended without duplicates, up to 100 results per category. The first page never changes.
 - **Last update time** under the header: the time when the list was received ("Aggiornato alle 14:30"), or date and time when the list is from another day.
 - **Saved list**: the first page of the last list received for each category is kept on the device (the articles added at the end of the list are not saved). When loading fails and there is nothing else to show, for example when the app is opened without a network connection, the saved list appears with a non-blocking message and the time it was saved.
 - **Mobile and desktop layout**: one card per row on phones; in windows at least 768 points wide (CSS pixels on web; tablets too) a grid with at least three cards per row, with one more column whenever every card stays at least 320 points wide.
@@ -19,7 +19,7 @@ A React Native app, built with [Expo](https://expo.dev), that shows the main new
 
 ### Known limits of the Italian sources
 
-- NewsAPI's `top-headlines` returns at most 10 headlines per outlet, so "Italia" starts with at most 20 headlines followed by up to 10 ANSA articles; more ANSA articles are added at the end of the list.
+- NewsAPI's `top-headlines` returns at most 10 headlines per outlet, so "Italia" starts with at most 20 headlines followed by up to 10 ANSA articles. The pages added at the end of the list, sorted by date across the three outlets, are mostly ANSA articles, and the first of them repeats part of the first page, so it adds fewer than 20 cards.
 - Il Sole 24 Ore often returns the image URL as the string `"null"`: those cards show the placeholder.
 - ANSA publishes the same piece on different URLs for its regional editions: articles with the same title and the same source appear only once, as the first one received, which can be a regional edition. An edition with a different title remains a separate card.
 - Google News Italia is excluded on purpose: its items point to redirect links and do not name the original outlet or the author.
@@ -61,7 +61,7 @@ Then scan the QR code with Expo Go on your device, or press `a` for an Android e
 
 Set `EXPO_PUBLIC_NEWS_USE_FIXTURES=true` in `.env`, or in the shell before `npx expo start` (bash: `EXPO_PUBLIC_NEWS_USE_FIXTURES=true npx expo start`; PowerShell: `$env:EXPO_PUBLIC_NEWS_USE_FIXTURES='true'; npx expo start`), and the app serves the real responses saved in `services/fixtures/` instead of calling NewsAPI: no request is sent and no key is needed. Leave the variable empty to use NewsAPI. Restart the server after changing it.
 
-Use it for day-to-day development: on the free plan every reload of the page, every Fast Refresh and every category switch costs requests. The fixtures hold one page per request, so in fixture mode nothing is added at the end of the list, and a request with no fixture, such as one of a new category, ends with "An unexpected error occurred.". Leave the variable empty when checking the app against the real API.
+Use it for day-to-day development: on the free plan every reload of the page, every Fast Refresh and every category switch costs requests. The fixtures hold one page per request: in fixture mode the first arrival at the end of the list adds the articles of the more-news fixture of the category (9 new cards in "Italia", 20 in "USA") and the next ones add nothing. A request with no fixture, such as one of a new category, ends with "An unexpected error occurred.". Leave the variable empty when checking the app against the real API.
 
 ## Checks
 
@@ -73,7 +73,7 @@ npm test           # Unit tests of the pure functions (Jest with the jest-expo p
 
 ## Limits of the NewsAPI free plan
 
-- **100 requests per day per key**, shared by web, Android and iOS. Every start, refresh, "Retry" and category switch loads the first page of the selected category: two requests for "Italia" (headlines plus ANSA), one for "USA". Every page loaded at the end of the list costs one request for each source that still has results, in practice one ANSA request in "Italia". Opening the settings, switching language or theme and showing the saved list cost no requests. The app never polls and retries a request at most once, only for network errors.
+- **100 requests per day per key**, shared by web, Android and iOS. Every start, refresh, "Retry" and category switch loads the first page of the selected category: two requests for "Italia" (headlines plus ANSA), one for "USA". Every page loaded at the end of the list costs one request, in both categories, and a category asks at most five pages. Opening the settings, switching language or theme and showing the saved list cost no requests. The app never polls and retries a request at most once, only for network errors.
 - **24-hour delay** on the articles of every category: the "news of the moment" is about one day old, which is why each card shows the publication date.
 - **CORS enabled only for `localhost`**: the web version works only in the browser of the machine that runs `npx expo start`, opened at `localhost`. From another device on the local network, or once published, the requests fail with the "No connection" message.
 - **At most 100 results per request**, a limit reported by developers and not documented by NewsAPI (beyond it the API answers HTTP 426): the app asks for no page beyond 100 results per request.
@@ -102,4 +102,4 @@ hooks/          Theme hooks and the context of the active theme
 utils/          Pure functions: dates, URLs, layout
 ```
 
-Constants (base URL, 50 articles per headlines request, 100 results per request, 10-second timeout) live in `constants/config.ts`. The categories and their requests live in `constants/news-sections.ts`: a new category also needs its chip label in `i18n/it.ts` and `i18n/en.ts` and, for fixture mode, a fixture in `services/fixtures/` mapped in `services/news-fixture-service.ts`.
+Constants (base URL, 50 articles per headlines request, 20 articles per page at the end of the list, 100 results per request, 10-second timeout) live in `constants/config.ts`. The categories, with the requests of their first page and the request of their more news, live in `constants/news-sections.ts`: a new category also needs its chip label in `i18n/it.ts` and `i18n/en.ts` and, for fixture mode, a fixture for each of its requests in `services/fixtures/` mapped in `services/news-fixture-service.ts`.
