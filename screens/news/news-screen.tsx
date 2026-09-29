@@ -1,4 +1,4 @@
-import { Stack } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import Head from 'expo-router/head';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { Alert, Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
@@ -11,31 +11,17 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
-import { ImageSwitch, type ImageSwitchOption } from '@/components/ui/image-switch';
+import { IconButton } from '@/components/ui/icon-button';
 import { LoadingState } from '@/components/ui/loading-state';
 import { MessageBanner } from '@/components/ui/message-banner';
 import { TextButton } from '@/components/ui/text-button';
 import { NEWS_SECTIONS, type NewsSectionKey } from '@/constants/news-sections';
 import { useI18n, type I18n } from '@/i18n/i18n-provider';
 import type { TranslationKey } from '@/i18n/it';
-import type { Language } from '@/repositories/language-model';
 import type { Article, NewsError } from '@/repositories/news-model';
 import { useNewsViewModel } from '@/screens/news/use-news-view-model';
 import { formatDateTime, formatTime, isToday } from '@/utils/date';
 import { getNewsLayout } from '@/utils/layout';
-
-const LANGUAGE_OPTIONS: readonly {
-  key: Language;
-  image: ImageSwitchOption['image'];
-  labelKey: TranslationKey;
-}[] = [
-  { key: 'it', image: require('@/assets/images/flags/italy.png'), labelKey: 'language.italian' },
-  {
-    key: 'en',
-    image: require('@/assets/images/flags/united-kingdom.png'),
-    labelKey: 'language.english',
-  },
-];
 
 function toListItem(
   article: Article,
@@ -86,31 +72,25 @@ export function NewsScreen() {
     loadMore,
     openArticle,
   } = useNewsViewModel();
-  const { language, t, locale, toggleLanguage } = useI18n();
+  const { t, locale } = useI18n();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { columns, horizontalMargin } = getNewsLayout(width);
   // On web there is no pull-to-refresh gesture and Alert.alert does nothing: a button and a banner take their place.
   const isWeb = Platform.OS === 'web';
 
-  const languageOptions = useMemo<ImageSwitchOption<Language>[]>(
-    () =>
-      LANGUAGE_OPTIONS.map(({ key, image, labelKey }) => ({
-        key,
-        image,
-        accessibilityLabel: t(labelKey),
-      })),
-    [t]
-  );
-
   const screenOptions = useMemo(
     () => ({
       title: t('app.name'),
       headerRight: () => (
-        <ImageSwitch options={languageOptions} selectedKey={language} onSelect={toggleLanguage} />
+        <IconButton
+          icon="settings-outline"
+          accessibilityLabel={t('settings.title')}
+          onPress={() => router.push('/settings')}
+        />
       ),
     }),
-    [language, languageOptions, t, toggleLanguage]
+    [t]
   );
 
   const sectionOptions = useMemo<CategoryChipOption<NewsSectionKey>[]>(

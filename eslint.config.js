@@ -15,9 +15,15 @@ const REPOSITORIES_EXCEPT_MODELS = String.raw`${PROJECT}repositories(?!/[^/]+-mo
 const SCREENS = folder('screens');
 // From a file in screens/<name>/: `./` is its own folder, `../<other>/` another screen.
 const SCREENS_RELATIVE = String.raw`^\.\.?/(?!\.\./)`;
+// From a file in screens/<name>/: `../<other>/` is another screen, `../../` the project root.
+const OTHER_SCREEN_RELATIVE = String.raw`^\.\./(?!\.\./)`;
+const NEWS_SCREEN = folder('screens/news');
+const SETTINGS_SCREEN = folder('screens/settings');
 const COMPONENTS = folder('components');
 const I18N = folder('i18n');
+const THEME_PREFERENCE = folder('theme');
 const HOOKS = folder('hooks');
+const HOOKS_EXCEPT_COLOR_SCHEME = String.raw`${PROJECT}hooks(?!/use-color-scheme(?:\.ts)?$)(?:/|$)`;
 const UTILS = folder('utils');
 const THEME = file('constants/theme');
 const CONFIG = file('constants/config');
@@ -28,6 +34,18 @@ const ANYTHING = '.';
 const forbid = (message, paths) => ({ regex: paths.join('|'), message });
 
 const NO_REACT = forbid('Services and repositories must not depend on React.', [REACT]);
+
+const SCREEN_MESSAGE =
+  'Screens may import only their own view model and folder constants, models, components, i18n, theme, utils and constants/news-sections, never the folder of another screen.';
+const SCREEN_FORBIDDEN = [
+  APP,
+  SERVICES,
+  REPOSITORIES_EXCEPT_MODELS,
+  HOOKS,
+  THEME,
+  CONFIG,
+  OTHER_SCREEN_RELATIVE,
+];
 
 // When several blocks match a file, the last one sets the rule.
 const restrictImports = (files, ...patterns) => ({
@@ -48,6 +66,7 @@ module.exports = defineConfig([
       SCREENS,
       COMPONENTS,
       I18N,
+      THEME_PREFERENCE,
       HOOKS,
       THEME,
       NEWS_SECTIONS,
@@ -58,7 +77,7 @@ module.exports = defineConfig([
     ['repositories/**'],
     forbid(
       'Repositories may import only services, DTOs, models, other repositories, constants/config, constants/news-sections and utils.',
-      [APP, SCREENS, COMPONENTS, I18N, HOOKS, THEME]
+      [APP, SCREENS, COMPONENTS, I18N, THEME_PREFERENCE, HOOKS, THEME]
     ),
     NO_REACT
   ),
@@ -68,43 +87,60 @@ module.exports = defineConfig([
       ANYTHING,
     ])
   ),
-  restrictImports(
-    ['screens/**'],
-    forbid(
-      'Screens may import only their own view model and folder constants, models, components, i18n, utils and constants/news-sections.',
-      [APP, SERVICES, REPOSITORIES_EXCEPT_MODELS, HOOKS, THEME, CONFIG]
-    )
-  ),
+  restrictImports(['screens/**'], forbid(SCREEN_MESSAGE, SCREEN_FORBIDDEN)),
+  restrictImports(['screens/news/**'], forbid(SCREEN_MESSAGE, [...SCREEN_FORBIDDEN, SETTINGS_SCREEN])),
+  restrictImports(['screens/settings/**'], forbid(SCREEN_MESSAGE, [...SCREEN_FORBIDDEN, NEWS_SCREEN])),
+  // After the screen blocks, so that a view model keeps its own rule.
   restrictImports(
     ['screens/**/use-*-view-model.ts'],
     forbid(
       'View models may import only repositories, models, constants/news-sections, React and platform libraries.',
-      [APP, SERVICES, SCREENS, SCREENS_RELATIVE, COMPONENTS, I18N, HOOKS, UTILS, THEME, CONFIG]
+      [
+        APP,
+        SERVICES,
+        SCREENS,
+        SCREENS_RELATIVE,
+        COMPONENTS,
+        I18N,
+        THEME_PREFERENCE,
+        HOOKS,
+        UTILS,
+        THEME,
+        CONFIG,
+      ]
     )
   ),
   restrictImports(
     ['components/**'],
     forbid(
       'UI components may import only other components, constants/theme, hooks and UI libraries: data and texts arrive via props.',
-      [APP, SERVICES, REPOSITORIES, SCREENS, I18N, UTILS, CONFIG, NEWS_SECTIONS]
+      [APP, SERVICES, REPOSITORIES, SCREENS, I18N, THEME_PREFERENCE, UTILS, CONFIG, NEWS_SECTIONS]
     )
   ),
   restrictImports(
     ['i18n/**'],
     forbid(
       'i18n follows the view model rules: besides its own files it may import only repositories, models, constants/news-sections, React and platform libraries.',
-      [APP, SERVICES, SCREENS, COMPONENTS, HOOKS, UTILS, THEME, CONFIG]
+      [APP, SERVICES, SCREENS, COMPONENTS, THEME_PREFERENCE, HOOKS, UTILS, THEME, CONFIG]
+    )
+  ),
+  restrictImports(
+    ['theme/**'],
+    forbid(
+      'theme follows the view model rules: besides its own files it may import only repositories, models, constants/news-sections, React, platform libraries and the color scheme context of hooks/use-color-scheme.',
+      [APP, SERVICES, SCREENS, COMPONENTS, I18N, HOOKS_EXCEPT_COLOR_SCHEME, UTILS, THEME, CONFIG]
     )
   ),
   restrictImports(
     ['constants/**', 'utils/**', 'hooks/**'],
-    forbid('constants, utils and hooks must not import routes, layers or i18n.', [
+    forbid('constants, utils and hooks must not import routes, layers, i18n or theme.', [
       APP,
       SERVICES,
       REPOSITORIES,
       SCREENS,
       COMPONENTS,
       I18N,
+      THEME_PREFERENCE,
     ])
   ),
 ]);

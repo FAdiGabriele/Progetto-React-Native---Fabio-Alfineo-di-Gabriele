@@ -11,9 +11,10 @@ A React Native app, built with [Expo](https://expo.dev), that shows the main new
 - **Last update time** under the header: the time when the list was received ("Aggiornato alle 14:30"), or date and time when the list is from another day.
 - **Saved list**: the first page of the last list received for each category is kept on the device (the articles added at the end of the list are not saved). When loading fails and there is nothing else to show, for example when the app is opened without a network connection, the saved list appears with a non-blocking message and the time it was saved.
 - **Mobile and desktop layout**: one card per row on phones; in windows at least 768 points wide (CSS pixels on web; tablets too) a grid with at least three cards per row, with one more column whenever every card stays at least 320 points wide.
-- **Italian and English interface**, chosen with the two flags in the header, Italy and the United Kingdom: the flag of the current language is highlighted and a tap on the other one switches language. The choice is remembered across restarts and dates follow the language.
-- **Light and dark theme**, following the system setting, and screen reader labels on cards, chips, buttons and language flags (read as "Italiano" and "Inglese", or "Italian" and "English", with the current language selected).
-- **App name and icon in the browser tab** on web: the tab always shows "News App" and the newspaper icon of the app, whatever the language and the category.
+- **Settings screen**, opened with the gear at the top right of the header: a "Theme" row and a "Language" row, each showing the current value and switching to the other one on tap, and at the bottom the app version and the footer. The back button returns to the news list as it was, without new requests.
+- **Italian and English interface**, chosen from the "Language" row of the settings, opened with the gear at the top right of the header: the row reads "Italiano" with the Italian interface and "English" with the English one, and a tap switches to the other language. The choice is remembered across restarts and dates follow the language.
+- **Light and dark theme**: the app starts in the dark theme, whatever the system setting, and the "Theme" row of the settings switches to the light one; the choice is remembered across restarts. Screen reader labels on cards, chips, buttons, the settings gear ("Impostazioni" / "Settings") and the settings rows, read with their current value ("Tema: Scuro" / "Theme: Dark", "Lingua: Italiano" / "Language: English").
+- **App name and icon in the browser tab** on web: the tab always shows "News App" and the newspaper icon of the app, whatever the language, the category and the screen.
 - Loading, error and empty states, the last two with a "Retry" button ("Riprova"); a 10-second timeout on every request; requests cancelled when a new load starts.
 
 ### Known limits of the Italian sources
@@ -72,7 +73,7 @@ npm test           # Unit tests of the pure functions (Jest with the jest-expo p
 
 ## Limits of the NewsAPI free plan
 
-- **100 requests per day per key**, shared by web, Android and iOS. Every start, refresh, "Retry" and category switch loads the first page of the selected category: two requests for "Italia" (headlines plus ANSA), one for "USA". Every page loaded at the end of the list costs one request for each source that still has results, in practice one ANSA request in "Italia". Switching language and showing the saved list cost no requests. The app never polls and retries a request at most once, only for network errors.
+- **100 requests per day per key**, shared by web, Android and iOS. Every start, refresh, "Retry" and category switch loads the first page of the selected category: two requests for "Italia" (headlines plus ANSA), one for "USA". Every page loaded at the end of the list costs one request for each source that still has results, in practice one ANSA request in "Italia". Opening the settings, switching language or theme and showing the saved list cost no requests. The app never polls and retries a request at most once, only for network errors.
 - **24-hour delay** on the articles of every category: the "news of the moment" is about one day old, which is why each card shows the publication date.
 - **CORS enabled only for `localhost`**: the web version works only in the browser of the machine that runs `npx expo start`, opened at `localhost`. From another device on the local network, or once published, the requests fail with the "No connection" message.
 - **At most 100 results per request**, a limit reported by developers and not documented by NewsAPI (beyond it the API answers HTTP 426): the app asks for no page beyond 100 results per request.
@@ -82,21 +83,22 @@ npm test           # Unit tests of the pure functions (Jest with the jest-expo p
 
 - The "Refresh" button replaces pull-to-refresh and shows an activity indicator while the list reloads.
 - Non-blocking notices (failed refresh, failed load at the end of the list, saved list, article that cannot be opened) appear in a banner under the category bar instead of a system alert.
-- The chosen language and the saved lists are stored in the browser's `localStorage` of the `localhost` origin.
+- The chosen theme, the chosen language and the saved lists are stored in the browser's `localStorage` of the `localhost` origin.
 
 ## Project structure
 
 The code follows a layered architecture (service, repository, ViewModel, screen, UI components), and ESLint checks the direction of the imports between the layers.
 
 ```
-app/            Expo Router routes: root layout and the "/" route, which only shows the news screen
-services/       Service layer and DTOs: NewsAPI client, fixture mode, saved list and language storage; fixtures/ with real responses
-repositories/   Repository layer and Model: news repository (sections, pages, saved list), mapper from DTO to Model, language repository
-screens/news/   The news screen and its ViewModel (a custom hook)
-components/     UI components that receive everything through props: card, list, image, category chips, states, text button, banner, image switch (the language flags)
+app/            Expo Router routes: root layout, the "/" route (news screen) and the "/settings" route (settings screen), each showing only its screen
+services/       Service layer and DTOs: NewsAPI client, fixture mode, saved list, language and theme storage, app version; fixtures/ with real responses
+repositories/   Repository layer and Model: news repository (sections, pages, saved list), mapper from DTO to Model, language, theme and app version repositories
+screens/        One folder per screen, each with the screen and its ViewModel (a custom hook): news/ and settings/
+components/     UI components that receive everything through props: card, list, image, category chips, states, text button, banner, icon button (the settings gear), list row (the settings rows)
 i18n/           Italian and English dictionaries and the language provider
+theme/          The theme provider: chosen theme, switch and saving
 constants/      Configuration, news sections and theme
-hooks/          Theme hooks
+hooks/          Theme hooks and the context of the active theme
 utils/          Pure functions: dates, URLs, layout
 ```
 
