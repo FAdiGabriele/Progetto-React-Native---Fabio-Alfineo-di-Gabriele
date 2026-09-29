@@ -9,19 +9,40 @@ const DATE_TIME_FORMAT_OPTIONS: Intl.DateTimeFormatOptions = {
   minute: '2-digit',
 };
 
-const formatters = new Map<string, Intl.DateTimeFormat>();
+const TIME_FORMAT_OPTIONS: Intl.DateTimeFormatOptions = {
+  hour: 'numeric',
+  minute: '2-digit',
+};
 
-function getFormatter(locale: string): Intl.DateTimeFormat {
-  let formatter = formatters.get(locale);
+const dateTimeFormatters = new Map<string, Intl.DateTimeFormat>();
+const timeFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function getFormatter(
+  cache: Map<string, Intl.DateTimeFormat>,
+  locale: string,
+  options: Intl.DateTimeFormatOptions
+): Intl.DateTimeFormat {
+  let formatter = cache.get(locale);
   if (!formatter) {
-    formatter = new Intl.DateTimeFormat(locale, DATE_TIME_FORMAT_OPTIONS);
-    formatters.set(locale, formatter);
+    formatter = new Intl.DateTimeFormat(locale, options);
+    cache.set(locale, formatter);
   }
   return formatter;
 }
 
 function isValidDate(date: Date): boolean {
   return !Number.isNaN(date.getTime());
+}
+
+function format(formatter: Intl.DateTimeFormat, date: Date): string {
+  const parts = formatter.formatToParts(date);
+  // Engines disagree on the hour width of 24-hour locales ("9:05" or "09:05"): always two digits there.
+  const twoDigitHour = !parts.some((part) => part.type === 'dayPeriod');
+  return parts
+    .map((part) => (twoDigitHour && part.type === 'hour' ? part.value.padStart(2, '0') : part.value))
+    .join('')
+    // Some ICU versions put a narrow no-break space before "PM": normalized to a plain space.
+    .replace(/[  ]/g, ' ');
 }
 
 /**
@@ -49,12 +70,29 @@ export function formatDateTime(date: Date | undefined, locale: string): string |
   if (!date || !isValidDate(date)) {
     return undefined;
   }
-  const parts = getFormatter(locale).formatToParts(date);
-  // Engines disagree on the hour width of 24-hour locales ("9:05" or "09:05"): always two digits there.
-  const twoDigitHour = !parts.some((part) => part.type === 'dayPeriod');
-  return parts
-    .map((part) => (twoDigitHour && part.type === 'hour' ? part.value.padStart(2, '0') : part.value))
-    .join('')
-    // Some ICU versions put a narrow no-break space before "PM": normalized to a plain space.
-    .replace(/[  ]/g, ' ');
+  return format(getFormatter(dateTimeFormatters, locale, DATE_TIME_FORMAT_OPTIONS), date);
+}
+
+/**
+ * Formats the time of day of a date in the device time zone, in the given locale:
+ * "14:30" for "it-IT", "2:30 PM" for "en-US". Undefined when the date is missing or invalid.
+ */
+export function formatTime(date: Date | undefined, locale: string): string | undefined {
+  if (!date || !isValidDate(date)) {
+    return undefined;
+  }
+  return format(getFormatter(timeFormatters, locale, TIME_FORMAT_OPTIONS), date);
+}
+
+/** Whether the date falls on the current day of the device time zone; false for an invalid date. */
+export function isToday(date: Date): boolean {
+  if (!isValidDate(date)) {
+    return false;
+  }
+  const now = new Date();
+  return (
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  );
 }

@@ -12,7 +12,9 @@ export function EmptyState({ message, retryLabel, onRetry }: EmptyStateProps) {
 
   return (
     <View style={styles.container}>
-      <Ionicons name="file-tray-outline" size={48} color={icon} />
+      <View aria-hidden>
+        <Ionicons name="file-tray-outline" size={48} color={icon} />
+      </View>
       <ThemedText style={styles.message}>{message}</ThemedText>
       <TextButton title={retryLabel} accessibilityLabel={retryLabel} onPress={onRetry} />
     </View>

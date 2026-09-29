@@ -3,12 +3,14 @@ import {
   NEWS_API_BASE_URL,
   NEWS_API_KEY,
   REQUEST_TIMEOUT_MS,
+  USE_NEWS_FIXTURES,
 } from '@/constants/config';
 import type {
-  NewsApiArticleDto,
+  NewsApiPageDto,
   NewsApiRequestDto,
   NewsApiResponseDto,
 } from '@/services/news-api-dto';
+import { getFixturePage } from '@/services/news-fixture-service';
 
 export type NewsApiServiceErrorReason =
   | 'missingKey'
@@ -61,7 +63,8 @@ function buildUrl(request: NewsApiRequestDto): string {
   } else {
     query = `sources=${encodeList(request.sources)}`;
   }
-  return `${NEWS_API_BASE_URL}/${request.endpoint}?${query}&pageSize=${encodeURIComponent(request.pageSize)}`;
+  const page = request.page === undefined ? '' : `&page=${encodeURIComponent(request.page)}`;
+  return `${NEWS_API_BASE_URL}/${request.endpoint}?${query}&pageSize=${encodeURIComponent(request.pageSize)}${page}`;
 }
 
 async function send(url: string, signal?: AbortSignal): Promise<RawResponse> {
@@ -111,12 +114,35 @@ async function sendWithRetry(url: string, signal?: AbortSignal): Promise<RawResp
   }
 }
 
+// The error fetch rejects with when its signal is already aborted.
+function createAbortError(): Error {
+  const error = new Error('The operation was aborted.');
+  error.name = 'AbortError';
+  return error;
+}
+
+function getFixtureArticles(request: NewsApiRequestDto, signal?: AbortSignal): NewsApiPageDto {
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
+  const page = getFixturePage(request);
+  if (page === undefined) {
+    throw new NewsApiServiceError('invalidResponse', { message: 'No fixture for the request' });
+  }
+  return page;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
 function isOkResponse(value: unknown): value is OkResponseDto {
-  return isRecord(value) && value.status === 'ok' && Array.isArray(value.articles);
+  return (
+    isRecord(value) &&
+    value.status === 'ok' &&
+    typeof value.totalResults === 'number' &&
+    Array.isArray(value.articles)
+  );
 }
 
 function parseJson(body: string): unknown {
@@ -127,7 +153,7 @@ function parseJson(body: string): unknown {
   }
 }
 
-function parseResponse({ status, ok, body }: RawResponse): NewsApiArticleDto[] {
+function parseResponse({ status, ok, body }: RawResponse): NewsApiPageDto {
   const parsed = parseJson(body);
   if (isRecord(parsed) && parsed.status === 'error') {
     throw new NewsApiServiceError('http', {
@@ -140,19 +166,24 @@ function parseResponse({ status, ok, body }: RawResponse): NewsApiArticleDto[] {
     throw new NewsApiServiceError('http', { status });
   }
   if (isOkResponse(parsed)) {
-    return parsed.articles;
+    return { totalResults: parsed.totalResults, articles: parsed.articles };
   }
   throw new NewsApiServiceError('invalidResponse', { status });
 }
 
 /**
- * Fetches the articles of a NewsAPI request. Rejects with a NewsApiServiceError,
- * or with the fetch abort error unchanged when the caller aborts `signal`.
+ * Fetches one page of a NewsAPI request: its articles and the total number of results.
+ * Rejects with a NewsApiServiceError, or with the fetch abort error unchanged when the
+ * caller aborts `signal`. In fixture mode the page comes from `services/fixtures/`,
+ * without any request and without checking the key.
  */
 export async function getArticles(
   request: NewsApiRequestDto,
   signal?: AbortSignal
-): Promise<NewsApiArticleDto[]> {
+): Promise<NewsApiPageDto> {
+  if (USE_NEWS_FIXTURES) {
+    return getFixtureArticles(request, signal);
+  }
   if (!IS_NEWS_API_KEY_CONFIGURED) {
     throw new NewsApiServiceError('missingKey');
   }

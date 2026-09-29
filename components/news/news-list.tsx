@@ -1,5 +1,12 @@
 import { useMemo, type ReactElement } from 'react';
-import { FlatList, type ListRenderItemInfo, RefreshControl, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator,
+  FlatList,
+  type ListRenderItemInfo,
+  RefreshControl,
+  StyleSheet,
+  View,
+} from 'react-native';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -15,6 +22,10 @@ export type NewsListProps = {
   horizontalMargin: number;
   refreshing: boolean;
   onRefresh: () => void;
+  /** Shows an activity indicator below the last card while a later page is loading. */
+  loadingMore: boolean;
+  /** Called when the scroll reaches the end of the list; absent when there is nothing more to load. */
+  onEndReached?: () => void;
   emptyComponent: ReactElement;
 };
 
@@ -55,16 +66,29 @@ function GridRowSeparator() {
   return <View style={styles.gridRowSeparator} />;
 }
 
+// The footer keeps a fixed height while more pages exist, so that a page starting or failing
+// does not change the content length: the FlatList would otherwise call onEndReached again by itself.
+function ListFooter({ loading, color }: { loading: boolean; color: string }) {
+  return (
+    <View style={styles.footer}>
+      {loading && <ActivityIndicator size="small" color={color} />}
+    </View>
+  );
+}
+
 export function NewsList({
   items,
   columns,
   horizontalMargin,
   refreshing,
   onRefresh,
+  loadingMore,
+  onEndReached,
   emptyComponent,
 }: NewsListProps) {
   const insets = useSafeAreaInsets();
   const tint = useThemeColor({}, 'tint');
+  const card = useThemeColor({}, 'card');
   const isGrid = columns > 1;
   const cells = useMemo(() => toCells(items, columns), [items, columns]);
 
@@ -78,8 +102,22 @@ export function NewsList({
       renderItem={isGrid ? renderGridCell : renderRow}
       ItemSeparatorComponent={isGrid ? GridRowSeparator : RowSeparator}
       ListEmptyComponent={emptyComponent}
+      ListFooterComponent={
+        loadingMore || onEndReached !== undefined ? (
+          <ListFooter loading={loadingMore} color={tint} />
+        ) : null
+      }
+      onEndReached={onEndReached}
+      onEndReachedThreshold={0.5}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={tint} colors={[tint]} />
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={tint}
+          colors={[tint]}
+          // By default Android draws the indicator on a near-white circle, where a white tint disappears.
+          progressBackgroundColor={card}
+        />
       }
       style={styles.list}
       contentContainerStyle={[
@@ -113,5 +151,10 @@ const styles = StyleSheet.create({
   },
   gridRowSeparator: {
     height: Layout.cardGap.desktop,
+  },
+  footer: {
+    height: 44, // 12 points above and below the 20-point indicator
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

@@ -2,11 +2,20 @@ import type { Dictionary } from '@/i18n/it';
 
 /** English texts of the interface, with the same keys as the Italian dictionary. */
 export const en: Dictionary = {
-  'news.title': 'News',
+  'app.name': 'News App',
   'news.updatedAtTime': 'Updated at {time}',
   'news.updatedAtDate': 'Updated on {dateTime}',
-  'language.switch': 'Italiano',
-  'language.switchA11y': 'Switch to Italian',
+  'news.refresh': 'Refresh',
+  'language.italian': 'Italian',
+  'language.english': 'English',
+  'settings.title': 'Settings',
+  'settings.theme': 'Theme',
+  'settings.themeDark': 'Dark',
+  'settings.themeLight': 'Light',
+  'settings.language': 'Language',
+  'settings.rowA11y': '{name}: {value}',
+  'settings.version': 'Version {version}',
+  'settings.footer': 'Developed by Fabio Alfineo di Gabriele',
   'categories.italy': 'Italy',
   'categories.usa': 'USA',
   'states.loading': 'Loading news...',

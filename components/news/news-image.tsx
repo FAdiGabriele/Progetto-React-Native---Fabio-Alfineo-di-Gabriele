@@ -20,8 +20,7 @@ export function NewsImage({ imageUrl }: NewsImageProps) {
       <View
         style={[styles.size, styles.placeholder, { backgroundColor: placeholderColor }]}
         accessible={false}
-        importantForAccessibility="no-hide-descendants"
-        accessibilityElementsHidden
+        aria-hidden
       >
         <Ionicons name="newspaper-outline" size={40} color={iconColor} />
       </View>
@@ -37,6 +36,7 @@ export function NewsImage({ imageUrl }: NewsImageProps) {
       transition={200}
       recyclingKey={imageUrl}
       accessible={false}
+      accessibilityLabel=""
       onError={() => setFailedUrl(imageUrl)}
     />
   );

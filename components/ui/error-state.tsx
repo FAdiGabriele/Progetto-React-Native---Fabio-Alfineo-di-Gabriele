@@ -12,7 +12,9 @@ export function ErrorState({ message, retryLabel, onRetry }: ErrorStateProps) {
 
   return (
     <View style={styles.container}>
-      <Ionicons name="alert-circle-outline" size={48} color={icon} />
+      <View aria-hidden>
+        <Ionicons name="alert-circle-outline" size={48} color={icon} />
+      </View>
       <ThemedText style={styles.message}>{message}</ThemedText>
       <TextButton title={retryLabel} accessibilityLabel={retryLabel} onPress={onRetry} />
     </View>

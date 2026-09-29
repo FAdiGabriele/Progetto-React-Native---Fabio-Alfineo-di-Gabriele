@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
@@ -7,19 +7,27 @@ export type TextButtonProps = {
   title: string;
   accessibilityLabel: string;
   onPress: () => void;
+  /** Shows a small activity indicator instead of the title and ignores presses. */
+  loading?: boolean;
 };
 
-export function TextButton({ title, accessibilityLabel, onPress }: TextButtonProps) {
+export function TextButton({ title, accessibilityLabel, onPress, loading = false }: TextButtonProps) {
   const tint = useThemeColor({}, 'tint');
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      aria-busy={loading}
+      disabled={loading}
       onPress={onPress}
       style={({ pressed }) => [styles.button, pressed && styles.pressed]}
     >
-      <ThemedText style={[styles.title, { color: tint }]}>{title}</ThemedText>
+      {loading ? (
+        <ActivityIndicator size="small" color={tint} />
+      ) : (
+        <ThemedText style={[styles.title, { color: tint }]}>{title}</ThemedText>
+      )}
     </Pressable>
   );
 }
