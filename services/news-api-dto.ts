@@ -30,8 +30,11 @@ export type NewsApiRequestDto = (
     }
 ) & { page?: number }; // absent for the first page
 
-/** Last saved list of a news section: the article DTOs of its first page and when they were saved. */
+/**
+ * Last saved list of a news section: the article DTOs of every request of its first page,
+ * in request order, and when they were saved.
+ */
 export type NewsCacheEntryDto = {
   savedAt: string; // ISO 8601
-  articles: NewsApiArticleDto[];
+  requests: NewsApiArticleDto[][];
 };

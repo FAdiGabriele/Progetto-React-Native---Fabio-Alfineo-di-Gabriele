@@ -2,11 +2,12 @@ import { openBrowserAsync } from 'expo-web-browser';
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { Linking, Platform } from 'react-native';
 
-import { NEWS_SECTIONS, type NewsSectionKey } from '@/constants/news-sections';
-import { appendArticles } from '@/repositories/news-mapper';
+import { NEWS_SECTIONS, type NewsGroupKey, type NewsSectionKey } from '@/constants/news-sections';
+import { appendGroups } from '@/repositories/news-mapper';
 import {
   NewsError,
   type Article,
+  type NewsGroup,
   type NewsPageCursor,
   type SavedNews,
 } from '@/repositories/news-model';
@@ -14,8 +15,15 @@ import { getSavedSectionArticles, getSectionArticles } from '@/repositories/news
 
 export type NewsStatus = 'idle' | 'loading' | 'refreshing' | 'loadingMore' | 'success' | 'error';
 
+/** Group of the list of a section: the key of its heading and its articles. */
+export type NewsSectionGroup = NewsGroup<NewsGroupKey>;
+
 export type NewsViewModel = {
-  articles: Article[];
+  /**
+   * Groups of the list, in section order: one per request of the first page that returned
+   * articles, then the group of the more news added at the end; empty without articles.
+   */
+  groups: NewsSectionGroup[];
   status: NewsStatus;
   /**
    * Error of the last failed load or, in `success`, of the first failed request of a partial
@@ -47,7 +55,7 @@ export type NewsViewModel = {
 };
 
 type State = {
-  articles: Article[];
+  groups: NewsSectionGroup[];
   status: NewsStatus;
   error: NewsError | null;
   selectedSection: NewsSectionKey;
@@ -60,20 +68,20 @@ type Action =
   | { type: 'loadStarted' }
   | {
       type: 'loadSucceeded';
-      articles: Article[];
+      groups: NewsSectionGroup[];
       cursor?: NewsPageCursor;
       partialError?: NewsError;
       receivedAt: Date;
     }
-  | { type: 'loadFailed'; error: NewsError; saved: SavedNews | null }
+  | { type: 'loadFailed'; error: NewsError; saved: SavedNews<NewsGroupKey> | null }
   | { type: 'loadMoreStarted' }
-  | { type: 'loadMoreSucceeded'; articles: Article[]; cursor?: NewsPageCursor }
+  | { type: 'loadMoreSucceeded'; groups: NewsSectionGroup[]; cursor?: NewsPageCursor }
   | { type: 'loadMoreFailed'; error: NewsError };
 
 const INITIAL_SECTION: NewsSectionKey = NEWS_SECTIONS[0].key;
 
 const INITIAL_STATE: State = {
-  articles: [],
+  groups: [],
   status: 'idle',
   error: null,
   selectedSection: INITIAL_SECTION,
@@ -82,12 +90,12 @@ const INITIAL_STATE: State = {
 function reduce(state: State, action: Action): State {
   switch (action.type) {
     case 'sectionSelected':
-      return { articles: [], status: 'loading', error: null, selectedSection: action.section };
+      return { groups: [], status: 'loading', error: null, selectedSection: action.section };
     case 'loadStarted': {
       // With articles on screen the load is a refresh and keeps them, with their cursor, so that
       // a failed refresh leaves the list able to load its next page; otherwise the loading state
       // shows.
-      const hasArticles = state.articles.length > 0;
+      const hasArticles = state.groups.length > 0;
       return {
         ...state,
         status: hasArticles ? 'refreshing' : 'loading',
@@ -98,7 +106,7 @@ function reduce(state: State, action: Action): State {
     case 'loadSucceeded':
       return {
         ...state,
-        articles: action.articles,
+        groups: action.groups,
         status: 'success',
         error: action.partialError ?? null,
         updatedAt: action.receivedAt,
@@ -110,7 +118,7 @@ function reduce(state: State, action: Action): State {
       }
       return {
         ...state,
-        articles: action.saved.articles,
+        groups: action.saved.groups,
         status: 'error',
         error: action.error,
         updatedAt: action.saved.savedAt,
@@ -121,7 +129,7 @@ function reduce(state: State, action: Action): State {
     case 'loadMoreSucceeded':
       return {
         ...state,
-        articles: appendArticles(state.articles, action.articles),
+        groups: appendGroups(state.groups, action.groups),
         status: 'success',
         error: null,
         cursor: action.cursor,
@@ -135,7 +143,7 @@ function toNewsError(error: unknown): NewsError {
   return error instanceof NewsError ? error : new NewsError('unknown');
 }
 
-function readSavedList(section: NewsSectionKey): Promise<SavedNews | null> {
+function readSavedList(section: NewsSectionKey): Promise<SavedNews<NewsGroupKey> | null> {
   return getSavedSectionArticles(section).catch(() => null);
 }
 
@@ -158,9 +166,9 @@ async function openUrl(url: string): Promise<boolean> {
 }
 
 /**
- * State and actions of the news screen: the selected section, its articles and later
- * pages, the outcome of the last load, when the list was received and the opening of an
- * article in the browser. Every load cancels the previous one, whose outcome is
+ * State and actions of the news screen: the selected section, the groups of its articles
+ * and later pages, the outcome of the last load, when the list was received and the opening
+ * of an article in the browser. Every load cancels the previous one, whose outcome is
  * discarded, so only the most recent request ever updates the state.
  */
 export function useNewsViewModel(): NewsViewModel {
@@ -189,7 +197,7 @@ export function useNewsViewModel(): NewsViewModel {
           if (isCurrent(controller)) {
             dispatch({
               type: 'loadSucceeded',
-              articles: page.articles,
+              groups: page.groups,
               cursor: page.next,
               partialError: page.partialError,
               receivedAt: new Date(),
@@ -219,8 +227,8 @@ export function useNewsViewModel(): NewsViewModel {
     };
   }, [load]);
 
-  const { articles, status, selectedSection, cursor } = state;
-  const hasArticles = articles.length > 0;
+  const { groups, status, selectedSection, cursor } = state;
+  const hasArticles = groups.length > 0;
 
   const refresh = useCallback(() => {
     if (status === 'refreshing') {
@@ -250,7 +258,7 @@ export function useNewsViewModel(): NewsViewModel {
     getSectionArticles(selectedSection, controller.signal, cursor).then(
       (page) => {
         if (isCurrent(controller)) {
-          dispatch({ type: 'loadMoreSucceeded', articles: page.articles, cursor: page.next });
+          dispatch({ type: 'loadMoreSucceeded', groups: page.groups, cursor: page.next });
         }
       },
       (error: unknown) => {
@@ -274,7 +282,7 @@ export function useNewsViewModel(): NewsViewModel {
   }, []);
 
   return {
-    articles,
+    groups,
     status,
     error: state.error,
     selectedSection,

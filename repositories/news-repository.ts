@@ -1,6 +1,6 @@
 import { NEWS_MAX_RESULTS } from '@/constants/config';
-import { NEWS_SECTIONS, type NewsSectionKey } from '@/constants/news-sections';
-import { mapArticles } from '@/repositories/news-mapper';
+import { NEWS_SECTIONS, type NewsGroupKey, type NewsSectionKey } from '@/constants/news-sections';
+import { mapGroups } from '@/repositories/news-mapper';
 import {
   NewsError,
   type NewsErrorKind,
@@ -14,6 +14,8 @@ import { readEntry, writeEntry } from '@/services/news-cache-service';
 import { parseIsoDate } from '@/utils/date';
 
 type NewsSection = (typeof NEWS_SECTIONS)[number];
+
+type SectionPage = NewsPage<NewsGroupKey>;
 
 const FIRST_PAGE = 1;
 
@@ -85,17 +87,24 @@ function hasMorePages(page: number, pageSize: number, totalResults: number): boo
   return received < totalResults && received < NEWS_MAX_RESULTS;
 }
 
-async function saveEntry(sectionKey: string, articles: NewsApiArticleDto[]): Promise<void> {
+// The groups of the first page of a section: one per request, with its article DTOs.
+function toFirstPageGroups(section: NewsSection, requestArticles: readonly NewsApiArticleDto[][]) {
+  return mapGroups(
+    section.requests.map(({ group }, index) => ({ key: group, articles: requestArticles[index] }))
+  );
+}
+
+async function saveEntry(sectionKey: string, requests: NewsApiArticleDto[][]): Promise<void> {
   try {
-    await writeEntry(sectionKey, { savedAt: new Date().toISOString(), articles });
+    await writeEntry(sectionKey, { savedAt: new Date().toISOString(), requests });
   } catch {
     // A page that cannot be saved is still a valid page.
   }
 }
 
-async function getFirstPage(section: NewsSection, signal?: AbortSignal): Promise<NewsPage> {
+async function getFirstPage(section: NewsSection, signal?: AbortSignal): Promise<SectionPage> {
   const results = await Promise.allSettled(
-    section.requests.map((request) => getArticles(request, signal))
+    section.requests.map(({ request }) => getArticles(request, signal))
   );
 
   const failures = results.filter((result) => result.status === 'rejected');
@@ -109,17 +118,18 @@ async function getFirstPage(section: NewsSection, signal?: AbortSignal): Promise
     partialError = failure;
   }
 
-  const dtos = results.flatMap((result) =>
+  // The article DTOs of every request, in section order; none for a failed request.
+  const requestArticles = results.map((result) =>
     result.status === 'fulfilled' ? result.value.articles : []
   );
-  const articles = mapArticles(dtos);
+  const groups = toFirstPageGroups(section, requestArticles);
   // A partial page does not replace the complete list saved by an earlier load.
-  if (articles.length > 0 && partialError === undefined) {
-    await saveEntry(section.key, dtos);
+  if (groups.length > 0 && partialError === undefined) {
+    await saveEntry(section.key, requestArticles);
   }
 
-  const page: NewsPage =
-    section.moreRequest === undefined ? { articles } : { articles, next: { page: FIRST_PAGE } };
+  const page: SectionPage =
+    section.moreRequest === undefined ? { groups } : { groups, next: { page: FIRST_PAGE } };
   return partialError === undefined ? page : { ...page, partialError };
 }
 
@@ -127,61 +137,66 @@ async function getMorePage(
   section: NewsSection,
   cursor: NewsPageCursor,
   signal?: AbortSignal
-): Promise<NewsPage> {
-  const request = section.moreRequest;
-  if (request === undefined) {
-    return { articles: [] };
+): Promise<SectionPage> {
+  const more = section.moreRequest;
+  if (more === undefined) {
+    return { groups: [] };
   }
 
   let page: NewsApiPageDto;
   try {
-    page = await getArticles(withPage(request, cursor.page), signal);
+    page = await getArticles(withPage(more.request, cursor.page), signal);
   } catch (error) {
     throw toThrowable(error, signal);
   }
 
-  const articles = mapArticles(page.articles);
-  return hasMorePages(cursor.page, request.pageSize, page.totalResults)
-    ? { articles, next: { page: cursor.page + 1 } }
-    : { articles };
+  const groups = mapGroups([{ key: more.group, articles: page.articles }]);
+  return hasMorePages(cursor.page, more.request.pageSize, page.totalResults)
+    ? { groups, next: { page: cursor.page + 1 } }
+    : { groups };
 }
 
 /**
  * Fetches one page of a news section. Without a cursor it fetches the first page: the
  * requests of the section run in parallel with the same `signal` and the articles of the
- * successful ones are merged in section order; it rejects with a NewsError only when every
- * request fails, translating the error of the first one, while a page with some failed
- * requests carries the translated error of the first one in `partialError`. A first page
- * with every request successful and at least one article is saved as the last list of the
- * section before being returned, ignoring a failed save; a partial page leaves the saved
- * list untouched. The cursor of the result points to page 1 of the more-news request of the
- * section, when it has one. With a cursor it fetches that page of the more-news request
- * alone and returns the cursor of the following page, or none when the request is
- * exhausted; a failed request rejects with its NewsError, so a later call can retry the same
- * page. A cancellation requested through `signal` is rethrown unchanged.
+ * successful ones form the groups of the page, one per request in section order, without
+ * the empty ones; it rejects with a NewsError only when every request fails, translating the
+ * error of the first one, while a page with some failed requests carries the translated
+ * error of the first one in `partialError`. A first page with every request successful and
+ * at least one article is saved as the last list of the section before being returned,
+ * ignoring a failed save; a partial page leaves the saved list untouched. The cursor of the
+ * result points to page 1 of the more-news request of the section, when it has one. With a
+ * cursor it fetches that page of the more-news request alone, as the group of that request,
+ * and returns the cursor of the following page, or none when the request is exhausted; a
+ * failed request rejects with its NewsError, so a later call can retry the same page. A
+ * cancellation requested through `signal` is rethrown unchanged.
  */
 export async function getSectionArticles(
   sectionKey: NewsSectionKey,
   signal?: AbortSignal,
   cursor?: NewsPageCursor
-): Promise<NewsPage> {
+): Promise<SectionPage> {
   const section = getSection(sectionKey);
   return cursor === undefined ? getFirstPage(section, signal) : getMorePage(section, cursor, signal);
 }
 
 /**
- * Last saved list of a news section, or null when there is none, its instant cannot be
- * parsed or no article survives the mapping.
+ * Last saved list of a news section, with one group per request of its first page, or null
+ * when there is none, its instant cannot be parsed, it was saved with a different list of
+ * requests or no article survives the mapping.
  */
-export async function getSavedSectionArticles(sectionKey: NewsSectionKey): Promise<SavedNews | null> {
+export async function getSavedSectionArticles(
+  sectionKey: NewsSectionKey
+): Promise<SavedNews<NewsGroupKey> | null> {
+  const section = getSection(sectionKey);
   const entry = await readEntry(sectionKey);
   if (entry === null) {
     return null;
   }
   const savedAt = parseIsoDate(entry.savedAt);
-  if (savedAt === undefined) {
+  if (savedAt === undefined || entry.requests.length !== section.requests.length) {
     return null;
   }
-  const articles = mapArticles(entry.articles);
-  return articles.length > 0 ? { articles, savedAt } : null;
+  const groups = toFirstPageGroups(section, entry.requests);
+  return groups.length > 0 ? { groups, savedAt } : null;
 }

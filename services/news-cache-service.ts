@@ -9,7 +9,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isCacheEntry(value: unknown): value is NewsCacheEntryDto {
-  return isRecord(value) && typeof value.savedAt === 'string' && Array.isArray(value.articles);
+  return (
+    isRecord(value) &&
+    typeof value.savedAt === 'string' &&
+    Array.isArray(value.requests) &&
+    value.requests.every((articles) => Array.isArray(articles))
+  );
 }
 
 /**

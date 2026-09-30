@@ -6,7 +6,7 @@ import { Alert, Platform, StyleSheet, useWindowDimensions, View } from 'react-na
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CategoryChips, type CategoryChipOption } from '@/components/news/category-chips';
-import { NewsList, type NewsListItem } from '@/components/news/news-list';
+import { NewsList, type NewsListGroup, type NewsListItem } from '@/components/news/news-list';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -77,7 +77,7 @@ function toNoticeMessage(notice: Notice, t: I18n['t']): string {
 
 export function NewsScreen() {
   const {
-    articles,
+    groups,
     status,
     error,
     selectedSection,
@@ -144,15 +144,19 @@ export function NewsScreen() {
     [openArticle, showNotice]
   );
 
-  const items = useMemo(
+  const listGroups = useMemo<NewsListGroup[]>(
     () =>
-      articles.map((article) =>
-        toListItem(article, t, locale, () => handleArticlePress(article))
-      ),
-    [articles, handleArticlePress, locale, t]
+      groups.map((group) => ({
+        key: group.key,
+        title: t(`groups.${group.key}`),
+        items: group.articles.map((article) =>
+          toListItem(article, t, locale, () => handleArticlePress(article))
+        ),
+      })),
+    [groups, handleArticlePress, locale, t]
   );
 
-  const hasArticles = articles.length > 0;
+  const hasArticles = groups.length > 0;
   const errorMessage = error === null ? null : t(`errors.${error.kind}`);
   const updatedAtLabel = toUpdatedAtLabel(updatedAt, t, locale);
   const isLoading = status === 'idle' || status === 'loading';
@@ -205,7 +209,7 @@ export function NewsScreen() {
   } else {
     content = (
       <NewsList
-        items={items}
+        groups={listGroups}
         columns={columns}
         horizontalMargin={horizontalMargin}
         refreshing={status === 'refreshing'}
