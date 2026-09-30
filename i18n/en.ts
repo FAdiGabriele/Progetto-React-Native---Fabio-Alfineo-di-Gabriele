@@ -29,6 +29,7 @@ export const en: Dictionary = {
   'errors.badRequest': 'Invalid request. Check the app configuration.',
   'errors.server': 'The news service is unavailable. Try again later.',
   'errors.unknown': 'An unexpected error occurred.',
+  'errors.partial': 'Some news could not be loaded. {message}',
   'errors.openArticle': 'Unable to open the article.',
   'card.a11y': 'Open article: {title}, {source}',
 };

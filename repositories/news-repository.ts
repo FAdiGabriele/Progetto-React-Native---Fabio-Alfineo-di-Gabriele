@@ -99,19 +99,28 @@ async function getFirstPage(section: NewsSection, signal?: AbortSignal): Promise
   );
 
   const failures = results.filter((result) => result.status === 'rejected');
-  if (failures.length > 0 && failures.length === results.length) {
-    throw toThrowable(failures[0].reason, signal);
+  let partialError: NewsError | undefined;
+  if (failures.length > 0) {
+    const failure = toThrowable(failures[0].reason, signal);
+    // Every request failed, or the caller cancelled: there is no page to return.
+    if (failures.length === results.length || !(failure instanceof NewsError)) {
+      throw failure;
+    }
+    partialError = failure;
   }
 
   const dtos = results.flatMap((result) =>
     result.status === 'fulfilled' ? result.value.articles : []
   );
   const articles = mapArticles(dtos);
-  if (articles.length > 0) {
+  // A partial page does not replace the complete list saved by an earlier load.
+  if (articles.length > 0 && partialError === undefined) {
     await saveEntry(section.key, dtos);
   }
 
-  return section.moreRequest === undefined ? { articles } : { articles, next: { page: FIRST_PAGE } };
+  const page: NewsPage =
+    section.moreRequest === undefined ? { articles } : { articles, next: { page: FIRST_PAGE } };
+  return partialError === undefined ? page : { ...page, partialError };
 }
 
 async function getMorePage(
@@ -141,13 +150,15 @@ async function getMorePage(
  * Fetches one page of a news section. Without a cursor it fetches the first page: the
  * requests of the section run in parallel with the same `signal` and the articles of the
  * successful ones are merged in section order; it rejects with a NewsError only when every
- * request fails, translating the error of the first one, and a first page with at least one
- * article is saved as the last list of the section before being returned, ignoring a failed
- * save. The cursor of the result points to page 1 of the more-news request of the section,
- * when it has one. With a cursor it fetches that page of the more-news request alone and
- * returns the cursor of the following page, or none when the request is exhausted; a failed
- * request rejects with its NewsError, so a later call can retry the same page. A cancellation
- * requested through `signal` is rethrown unchanged.
+ * request fails, translating the error of the first one, while a page with some failed
+ * requests carries the translated error of the first one in `partialError`. A first page
+ * with every request successful and at least one article is saved as the last list of the
+ * section before being returned, ignoring a failed save; a partial page leaves the saved
+ * list untouched. The cursor of the result points to page 1 of the more-news request of the
+ * section, when it has one. With a cursor it fetches that page of the more-news request
+ * alone and returns the cursor of the following page, or none when the request is
+ * exhausted; a failed request rejects with its NewsError, so a later call can retry the same
+ * page. A cancellation requested through `signal` is rethrown unchanged.
  */
 export async function getSectionArticles(
   sectionKey: NewsSectionKey,

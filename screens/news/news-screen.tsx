@@ -18,7 +18,7 @@ import { TextButton } from '@/components/ui/text-button';
 import { NEWS_SECTIONS, type NewsSectionKey } from '@/constants/news-sections';
 import { useI18n, type I18n } from '@/i18n/i18n-provider';
 import type { TranslationKey } from '@/i18n/it';
-import type { Article, NewsError } from '@/repositories/news-model';
+import type { Article, NewsError, NewsErrorKind } from '@/repositories/news-model';
 import { useNewsViewModel } from '@/screens/news/use-news-view-model';
 import { formatDateTime, formatTime, isToday } from '@/utils/date';
 import { getNewsLayout } from '@/utils/layout';
@@ -57,6 +57,22 @@ function toUpdatedAtLabel(
   }
   const dateTime = formatDateTime(updatedAt, locale);
   return dateTime === undefined ? undefined : t('news.updatedAtDate', { dateTime });
+}
+
+// A non-blocking notice: the key of its text and, for a partial first page, the kind of the
+// error reported inside it, both translated when the notice is shown.
+type Notice = { key: TranslationKey; errorKind?: NewsErrorKind };
+
+function toErrorNotice(error: NewsError, partial: boolean): Notice {
+  return partial
+    ? { key: 'errors.partial', errorKind: error.kind }
+    : { key: `errors.${error.kind}` };
+}
+
+function toNoticeMessage(notice: Notice, t: I18n['t']): string {
+  return notice.errorKind === undefined
+    ? t(notice.key)
+    : t(notice.key, { message: t(`errors.${notice.errorKind}`) });
 }
 
 export function NewsScreen() {
@@ -99,28 +115,29 @@ export function NewsScreen() {
   );
 
   // Non-blocking notices: a banner on web, an alert elsewhere.
-  const [noticeKey, setNoticeKey] = useState<TranslationKey | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
   const alertNotice = useCallback(
-    (key: TranslationKey) => Alert.alert(t(key), undefined, [{ text: t('states.close') }]),
+    (shown: Notice) =>
+      Alert.alert(toNoticeMessage(shown, t), undefined, [{ text: t('states.close') }]),
     [t]
   );
   const showNotice = useCallback(
-    (key: TranslationKey) => {
+    (shown: Notice) => {
       if (isWeb) {
-        setNoticeKey(key);
+        setNotice(shown);
       } else {
-        alertNotice(key);
+        alertNotice(shown);
       }
     },
     [alertNotice, isWeb]
   );
-  const hideNotice = useCallback(() => setNoticeKey(null), []);
+  const hideNotice = useCallback(() => setNotice(null), []);
 
   const handleArticlePress = useCallback(
     (article: Article) => {
       openArticle(article).then((opened) => {
         if (!opened) {
-          showNotice('errors.openArticle');
+          showNotice({ key: 'errors.openArticle' });
         }
       });
     },
@@ -138,21 +155,27 @@ export function NewsScreen() {
   const hasArticles = articles.length > 0;
   const errorMessage = error === null ? null : t(`errors.${error.kind}`);
   const updatedAtLabel = toUpdatedAtLabel(updatedAt, t, locale);
+  const isLoading = status === 'idle' || status === 'loading';
+  const showsList = !isLoading && !(status === 'error' && !hasArticles);
 
-  // With articles on screen a failed load is reported once, when its error appears; a successful
-  // load or another section hides the banner. The banner is updated while rendering, the alert
-  // after the commit.
+  // An error is reported with a notice when the list stays on screen: after a failed load with
+  // articles, or with the partial first page it comes with; without articles the error state
+  // shows it. A failed load is reported once, when its error appears; a successful load, another
+  // section or leaving the list hides the banner. The banner is updated while rendering, the
+  // alert after the commit.
+  const isPartial = status === 'success' && error !== null;
+  const noticeError = showsList ? error : null;
   const [lastLoad, setLastLoad] = useState({ status, selectedSection, error });
   const isNewError = error !== null && error !== lastLoad.error;
   if (status !== lastLoad.status || selectedSection !== lastLoad.selectedSection || isNewError) {
     setLastLoad({ status, selectedSection, error: error ?? lastLoad.error });
-    if (isWeb && hasArticles && error !== null && isNewError) {
-      setNoticeKey(`errors.${error.kind}`);
+    if (isWeb && noticeError !== null && isNewError) {
+      setNotice(toErrorNotice(noticeError, isPartial));
     } else if (
       selectedSection !== lastLoad.selectedSection ||
-      (status !== lastLoad.status && status === 'success')
+      (status !== lastLoad.status && (status === 'success' || !showsList))
     ) {
-      setNoticeKey(null);
+      setNotice(null);
     }
   }
   const alertedErrorRef = useRef<NewsError | null>(null);
@@ -161,13 +184,11 @@ export function NewsScreen() {
       return;
     }
     alertedErrorRef.current = error;
-    if (hasArticles) {
-      alertNotice(`errors.${error.kind}`);
+    if (noticeError !== null) {
+      alertNotice(toErrorNotice(noticeError, isPartial));
     }
-  }, [alertNotice, error, hasArticles, isWeb]);
+  }, [alertNotice, error, isPartial, isWeb, noticeError]);
 
-  const isLoading = status === 'idle' || status === 'loading';
-  const showsList = !isLoading && !(status === 'error' && !hasArticles);
   const showsRefreshButton = isWeb && showsList;
 
   let content: ReactElement;
@@ -235,9 +256,9 @@ export function NewsScreen() {
         onSelect={selectSection}
         horizontalMargin={horizontalMargin}
       />
-      {isWeb && noticeKey !== null && (
+      {isWeb && notice !== null && (
         <MessageBanner
-          message={t(noticeKey)}
+          message={toNoticeMessage(notice, t)}
           closeLabel={t('states.close')}
           onClose={hideNotice}
           horizontalMargin={horizontalMargin}

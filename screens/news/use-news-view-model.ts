@@ -17,6 +17,10 @@ export type NewsStatus = 'idle' | 'loading' | 'refreshing' | 'loadingMore' | 'su
 export type NewsViewModel = {
   articles: Article[];
   status: NewsStatus;
+  /**
+   * Error of the last failed load or, in `success`, of the first failed request of a partial
+   * first page, whose other requests filled the list; null otherwise.
+   */
   error: NewsError | null;
   selectedSection: NewsSectionKey;
   /**
@@ -54,7 +58,13 @@ type State = {
 type Action =
   | { type: 'sectionSelected'; section: NewsSectionKey }
   | { type: 'loadStarted' }
-  | { type: 'loadSucceeded'; articles: Article[]; cursor?: NewsPageCursor; receivedAt: Date }
+  | {
+      type: 'loadSucceeded';
+      articles: Article[];
+      cursor?: NewsPageCursor;
+      partialError?: NewsError;
+      receivedAt: Date;
+    }
   | { type: 'loadFailed'; error: NewsError; saved: SavedNews | null }
   | { type: 'loadMoreStarted' }
   | { type: 'loadMoreSucceeded'; articles: Article[]; cursor?: NewsPageCursor }
@@ -74,14 +84,15 @@ function reduce(state: State, action: Action): State {
     case 'sectionSelected':
       return { articles: [], status: 'loading', error: null, selectedSection: action.section };
     case 'loadStarted': {
-      // With articles on screen the load is a refresh and keeps them; otherwise the loading state shows.
+      // With articles on screen the load is a refresh and keeps them, with their cursor, so that
+      // a failed refresh leaves the list able to load its next page; otherwise the loading state
+      // shows.
       const hasArticles = state.articles.length > 0;
       return {
         ...state,
         status: hasArticles ? 'refreshing' : 'loading',
         error: null,
         updatedAt: hasArticles ? state.updatedAt : undefined,
-        cursor: undefined,
       };
     }
     case 'loadSucceeded':
@@ -89,7 +100,7 @@ function reduce(state: State, action: Action): State {
         ...state,
         articles: action.articles,
         status: 'success',
-        error: null,
+        error: action.partialError ?? null,
         updatedAt: action.receivedAt,
         cursor: action.cursor,
       };
@@ -180,6 +191,7 @@ export function useNewsViewModel(): NewsViewModel {
               type: 'loadSucceeded',
               articles: page.articles,
               cursor: page.next,
+              partialError: page.partialError,
               receivedAt: new Date(),
             });
           }

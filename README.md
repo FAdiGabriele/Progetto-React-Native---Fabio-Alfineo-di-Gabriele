@@ -4,12 +4,12 @@ A React Native app, built with [Expo](https://expo.dev), that shows the main new
 
 ## Features
 
-- **Two categories**, chosen with a chip bar under the header: **Italia** (the top headlines of la Repubblica and Il Sole 24 Ore, followed by up to 10 of the latest ANSA articles) and **USA** (the top headlines of the United States). "Italia" is selected at start; with the English interface the chips read "Italy" and "USA".
+- **Two categories**, chosen with a chip bar under the header: **Italia** (the top headlines of la Repubblica and Il Sole 24 Ore, followed by up to 10 of the latest ANSA articles) and **USA** (the top headlines of the United States). "Italia" is selected at start; with the English interface the chips read "Italy" and "USA". When only one of the two requests of "Italia" fails, the list shows the articles of the other one, with a non-blocking notice.
 - **One card per article**, with image (or a placeholder), source, title, description, publication date and author. A tap opens the article in the in-app browser, or in a new tab on web.
-- **Pull-to-refresh** on Android and iOS. On web, where the gesture does not exist, a **Refresh** button ("Aggiorna") next to the last update time reloads the list.
+- **Pull-to-refresh** on Android and iOS. On web, where the gesture does not exist, a **Refresh** button ("Aggiorna") next to the last update time reloads the list. If the refresh fails, the list stays as it was, including the news added at the end, and more can still be loaded.
 - **More news at the end of the list**: every time the scrolling reaches the bottom, the app loads one page of 20 articles from NewsAPI's `everything` on all the outlets of the category (ANSA, la Repubblica and Il Sole 24 Ore in "Italia", the US outlets listed in `constants/news-sections.ts` in "USA"), sorted by date and appended without duplicates, up to 100 results per category. The first page never changes.
 - **Last update time** under the header: the time when the list was received ("Aggiornato alle 14:30"), or date and time when the list is from another day.
-- **Saved list**: the first page of the last list received for each category is kept on the device (the articles added at the end of the list are not saved). When loading fails and there is nothing else to show, for example when the app is opened without a network connection, the saved list appears with a non-blocking message and the time it was saved.
+- **Saved list**: the first page of the last list received for each category is kept on the device (the articles added at the end of the list are not saved, and a first page with a failed request does not replace the saved one). When loading fails and there is nothing else to show, for example when the app is opened without a network connection, the saved list appears with a non-blocking message and the time it was saved.
 - **Mobile and desktop layout**: one card per row on phones; in windows at least 768 points wide (CSS pixels on web; tablets too) a grid with at least three cards per row, with one more column whenever every card stays at least 320 points wide.
 - **Settings screen**, opened with the gear at the top right of the header: a "Theme" row and a "Language" row, each showing the current value and switching to the other one on tap, and at the bottom the app version and the footer. The back button returns to the news list as it was, without new requests.
 - **Italian and English interface**, chosen from the "Language" row of the settings, opened with the gear at the top right of the header: the row reads "Italiano" with the Italian interface and "English" with the English one, and a tap switches to the other language. The choice is remembered across restarts and dates follow the language.
@@ -82,7 +82,7 @@ npm test           # Unit tests of the pure functions (Jest with the jest-expo p
 ## On the web
 
 - The "Refresh" button replaces pull-to-refresh and shows an activity indicator while the list reloads.
-- Non-blocking notices (failed refresh, failed load at the end of the list, saved list, article that cannot be opened) appear in a banner under the category bar instead of a system alert.
+- Non-blocking notices (failed refresh, incomplete first page, failed load at the end of the list, saved list, article that cannot be opened) appear in a banner under the category bar instead of a system alert.
 - The chosen theme, the chosen language and the saved lists are stored in the browser's `localStorage` of the `localhost` origin.
 
 ## Project structure

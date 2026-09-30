@@ -27,6 +27,7 @@ export const it = {
   'errors.badRequest': "Richiesta non valida. Controlla la configurazione dell'app.",
   'errors.server': 'Il servizio notizie non è disponibile. Riprova più tardi.',
   'errors.unknown': 'Si è verificato un errore imprevisto.',
+  'errors.partial': 'Alcune notizie non sono state caricate. {message}',
   'errors.openArticle': "Impossibile aprire l'articolo.",
   'card.a11y': 'Apri notizia: {title}, {source}',
 };

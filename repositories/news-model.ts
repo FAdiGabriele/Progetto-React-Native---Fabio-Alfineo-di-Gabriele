@@ -11,10 +11,15 @@ export type Article = {
   publishedAt?: Date; // absent when the API value cannot be parsed
 };
 
-/** One page of a news section, with the cursor of the next page of its more-news request. */
+/**
+ * One page of a news section, with the cursor of the next page of its more-news request
+ * and, for a first page whose requests did not all succeed, the error of the failed one.
+ */
 export type NewsPage = {
   articles: Article[];
   next?: NewsPageCursor; // absent when the section has no more-news request or has exhausted it
+  // First page only: the error of the first failed request, absent when every request succeeded.
+  partialError?: NewsError;
 };
 
 /** Opaque for view models and screens: only the repository builds and reads it. */
