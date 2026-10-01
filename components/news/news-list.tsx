@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { NewsCard, type NewsCardProps } from '@/components/news/news-card';
 import { ThemedText } from '@/components/themed-text';
+import { TextButton } from '@/components/ui/text-button';
 import { Layout } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
 
@@ -32,6 +33,10 @@ export type NewsListProps = {
   loadingMore: boolean;
   /** Called when the scroll reaches the end of the list; absent when there is nothing more to load. */
   onEndReached?: () => void;
+  /** Label of the button shown below the last card, in place of the indicator, when a later page failed. */
+  retryLabel: string;
+  /** Loads again the later page that failed; absent when none did, and the button with it. */
+  onRetry?: () => void;
   emptyComponent: ReactElement;
 };
 
@@ -102,12 +107,20 @@ function renderSectionHeader({ section }: { section: NewsListSectionData }) {
   );
 }
 
+type ListFooterProps = { loading: boolean; color: string; retryLabel: string; onRetry?: () => void };
+
 // The footer keeps a fixed height while more pages exist, so that a page starting or failing
 // does not change the content length: the list would otherwise call onEndReached again by itself.
-function ListFooter({ loading, color }: { loading: boolean; color: string }) {
+function ListFooter({ loading, color, retryLabel, onRetry }: ListFooterProps) {
   return (
     <View style={styles.footer}>
-      {loading && <ActivityIndicator size="small" color={color} />}
+      {loading ? (
+        <ActivityIndicator size="small" color={color} />
+      ) : (
+        onRetry !== undefined && (
+          <TextButton title={retryLabel} accessibilityLabel={retryLabel} onPress={onRetry} />
+        )
+      )}
     </View>
   );
 }
@@ -120,6 +133,8 @@ export function NewsList({
   onRefresh,
   loadingMore,
   onEndReached,
+  retryLabel,
+  onRetry,
   emptyComponent,
 }: NewsListProps) {
   const insets = useSafeAreaInsets();
@@ -156,8 +171,8 @@ export function NewsList({
       removeClippedSubviews={Platform.OS === 'android'}
       ListEmptyComponent={emptyComponent}
       ListFooterComponent={
-        loadingMore || onEndReached !== undefined ? (
-          <ListFooter loading={loadingMore} color={tint} />
+        loadingMore || onEndReached !== undefined || onRetry !== undefined ? (
+          <ListFooter loading={loadingMore} color={tint} retryLabel={retryLabel} onRetry={onRetry} />
         ) : null
       }
       onEndReached={onEndReached}
@@ -216,7 +231,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   footer: {
-    height: 44, // 12 points above and below the 20-point indicator
+    height: 44, // 12 points above and below the 20-point indicator, and the height of the button
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -84,11 +84,24 @@ function mapArticle(dto: unknown): Article | undefined {
   };
 }
 
-// Two articles are duplicates when they share a key: the same URL, or the same title from the same source.
+// The calendar day of the publication date in the device time zone, the one of the date shown
+// on the card; empty without a date.
+function getPublicationDay(article: Article): string {
+  const date = article.publishedAt;
+  return date === undefined ? '' : `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+}
+
+// Two articles are duplicates when they share a key: the same URL, or the same title from the
+// same source on the same day, so that a title recurring on another day is a different article.
 function getDuplicateKeys(article: Article): string[] {
   return [
     JSON.stringify(['url', article.id]),
-    JSON.stringify(['title', normalizeForComparison(article.sourceName), normalizeForComparison(article.title)]),
+    JSON.stringify([
+      'title',
+      normalizeForComparison(article.sourceName),
+      normalizeForComparison(article.title),
+      getPublicationDay(article),
+    ]),
   ];
 }
 
@@ -116,7 +129,7 @@ export type NewsGroupDtos<Key extends string> = {
 /**
  * Converts the article DTOs of one request into domain articles: invalid or removed articles
  * are dropped, optional fields are normalized, the source suffix of the title is removed and
- * duplicates, by URL or by title and source, keep their first occurrence.
+ * duplicates, by URL or by title, source and publication day, keep their first occurrence.
  */
 export function mapArticles(dtos: readonly NewsApiArticleDto[]): Article[] {
   return withoutDuplicates([], toArticles(dtos));

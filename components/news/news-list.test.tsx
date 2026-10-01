@@ -20,6 +20,7 @@ type HostElement = NonNullable<typeof screen.root>;
 type HostNode = HostElement['children'][number];
 
 const EMPTY_MESSAGE = 'No news to show';
+const RETRY_LABEL = 'Retry';
 const EMPTY_CELL = 'empty cell';
 const INSETS = { top: 47, right: 20, bottom: 34, left: 10 };
 const THEMES = ['light', 'dark'] as const;
@@ -63,6 +64,7 @@ function listElement(props: Partial<NewsListProps> = {}): ReactElement {
       refreshing={false}
       onRefresh={jest.fn()}
       loadingMore={false}
+      retryLabel={RETRY_LABEL}
       emptyComponent={<Text>{EMPTY_MESSAGE}</Text>}
       {...props}
     />
@@ -376,6 +378,37 @@ describe('NewsList', () => {
 
       expect(footers()).toHaveLength(0);
       expect(activityIndicators()).toHaveLength(0);
+    });
+
+    it('shows a retry button in the 44-point footer when a page failed and calls onRetry on press', async () => {
+      const onRetry = jest.fn();
+      await render(listElement({ onEndReached: jest.fn(), onRetry }));
+
+      const button = screen.getByRole('button', { name: RETRY_LABEL });
+      expect(footers()).toHaveLength(1);
+      expect(footers()[0]).toContainElement(button);
+      expect(button).toContainElement(screen.getByText(RETRY_LABEL));
+      expect(activityIndicators()).toHaveLength(0);
+
+      await fireEvent.press(button);
+
+      expect(onRetry).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows the indicator and no retry button while more news is loading, even with onRetry', async () => {
+      await render(listElement({ loadingMore: true, onEndReached: jest.fn(), onRetry: jest.fn() }));
+
+      expect(footers()).toHaveLength(1);
+      expect(activityIndicators()).toHaveLength(1);
+      expect(footers()[0]).toContainElement(activityIndicators()[0]);
+      expect(screen.queryByRole('button', { name: RETRY_LABEL })).not.toBeOnTheScreen();
+    });
+
+    it('renders the footer with the retry button even without onEndReached', async () => {
+      await render(listElement({ onRetry: jest.fn() }));
+
+      expect(footers()).toHaveLength(1);
+      expect(footers()[0]).toContainElement(screen.getByRole('button', { name: RETRY_LABEL }));
     });
   });
 

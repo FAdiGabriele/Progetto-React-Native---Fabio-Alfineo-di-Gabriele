@@ -29,6 +29,7 @@ export function NewsScreen() {
     updatedAtLabel,
     notice,
     hasMore,
+    loadMoreFailed,
     selectSection,
     refresh,
     loadMore,
@@ -89,6 +90,8 @@ export function NewsScreen() {
         onRefresh={refresh}
         loadingMore={status === 'loadingMore'}
         onEndReached={hasMore ? loadMore : undefined}
+        retryLabel={t('states.retry')}
+        onRetry={loadMoreFailed ? loadMore : undefined}
         emptyComponent={
           <EmptyState message={t('states.empty')} retryLabel={t('states.retry')} onRetry={refresh} />
         }

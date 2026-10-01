@@ -95,6 +95,7 @@ function viewModel(overrides: Partial<NewsViewModel> = {}): NewsViewModel {
     updatedAtLabel: 'Aggiornato alle 14:30',
     notice: null,
     hasMore: true,
+    loadMoreFailed: false,
     selectSection: jest.fn(),
     refresh: jest.fn(),
     loadMore: jest.fn(),
@@ -211,10 +212,28 @@ describe('NewsScreen', () => {
     expect(model.refresh).toHaveBeenCalledTimes(1);
   });
 
-  it('shows the indicator of more news while a page loads', async () => {
+  it('ends the list with a retry button when a page of more news failed, which loads that page again', async () => {
+    const model = await renderScreen({
+      status: 'error',
+      errorMessage: 'Connessione assente. Controlla la rete e riprova.',
+      loadMoreFailed: true,
+    });
+
+    const controls = screen.getAllByRole(/^(link|button)$/).map((element) => element.props.accessibilityLabel);
+    expect(controls.slice(-2)).toEqual(['Apri notizia: Title third, ANSA.it', 'Riprova']);
+    expect(activityIndicators()).toHaveLength(0);
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Riprova' }));
+
+    expect(model.loadMore).toHaveBeenCalledTimes(1);
+    expect(model.refresh).not.toHaveBeenCalled();
+  });
+
+  it('shows the indicator of more news while a page loads, without a retry button', async () => {
     await renderScreen({ status: 'loadingMore' });
 
     expect(activityIndicators()).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Riprova' })).toBeNull();
   });
 
   it('shows no indicator when no page is loading', async () => {

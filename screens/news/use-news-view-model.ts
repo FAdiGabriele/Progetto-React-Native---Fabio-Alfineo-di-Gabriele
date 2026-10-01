@@ -78,11 +78,17 @@ export type NewsViewModel = {
   notice: string | null;
   /** Whether the section still has more news to load at the end of the list. */
   hasMore: boolean;
+  /**
+   * Whether the last page of more news failed and no load is in progress: the end of the list
+   * offers to retry it with `loadMore`.
+   */
+  loadMoreFailed: boolean;
   selectSection: (section: NewsSectionKey) => void;
   refresh: () => void;
   /**
-   * Appends the next page of the section to the list; ignored without more pages or
-   * while another load is in progress.
+   * Appends the next page of the section to the list, or retries the one that failed; a page
+   * that adds nothing is followed at once by the next one, until one adds articles, fails or
+   * is the last. Ignored without more pages or while another load is in progress.
    */
   loadMore: () => void;
   dismissNotice: () => void;
@@ -97,6 +103,8 @@ export type NewsState = {
   updatedAt?: Date;
   cursor?: NewsPageCursor;
   notice: NewsNotice | null;
+  /** The last page of more news failed and the list on screen is still waiting for it. */
+  loadMoreFailed: boolean;
 };
 
 /** Events that move the state of the news screen: what the view model dispatches. */
@@ -112,6 +120,7 @@ export type NewsAction =
     }
   | { type: 'loadFailed'; error: NewsError; saved: SavedNews<NewsGroupKey> | null }
   | { type: 'loadMoreStarted' }
+  | { type: 'loadMoreSkipped'; cursor: NewsPageCursor }
   | { type: 'loadMoreSucceeded'; groups: NewsSectionGroup[]; cursor?: NewsPageCursor }
   | { type: 'loadMoreFailed'; error: NewsError }
   | { type: 'noticeDismissed' }
@@ -126,6 +135,7 @@ export const INITIAL_NEWS_STATE: NewsState = {
   error: null,
   selectedSection: INITIAL_SECTION,
   notice: null,
+  loadMoreFailed: false,
 };
 
 function loadFailedNotice(error: NewsError): NewsNotice {
@@ -142,15 +152,24 @@ export function reduceNewsState(state: NewsState, action: NewsAction): NewsState
         error: null,
         selectedSection: action.section,
         notice: null,
+        loadMoreFailed: false,
       };
     case 'loadStarted':
-      // With articles on screen the load is a refresh and keeps them, with their cursor and
-      // notice, so that a failed refresh leaves the list able to load its next page; otherwise
-      // the loading state takes the place of the list and of any notice over it.
+      // With articles on screen the load is a refresh and keeps them, with their cursor, their
+      // notice and their failed page, so that a failed refresh leaves the list able to load
+      // its next page; otherwise the loading state takes the place of the list and of any
+      // notice over it.
       if (state.groups.length > 0) {
         return { ...state, status: 'refreshing', error: null };
       }
-      return { ...state, status: 'loading', error: null, updatedAt: undefined, notice: null };
+      return {
+        ...state,
+        status: 'loading',
+        error: null,
+        updatedAt: undefined,
+        notice: null,
+        loadMoreFailed: false,
+      };
     case 'loadSucceeded':
       return {
         ...state,
@@ -163,6 +182,7 @@ export function reduceNewsState(state: NewsState, action: NewsAction): NewsState
           action.partialError === undefined
             ? null
             : { kind: 'loadFailed', error: action.partialError, partial: true },
+        loadMoreFailed: false,
       };
     case 'loadFailed':
       if (action.saved !== null) {
@@ -174,6 +194,7 @@ export function reduceNewsState(state: NewsState, action: NewsAction): NewsState
           updatedAt: action.saved.savedAt,
           cursor: undefined,
           notice: loadFailedNotice(action.error),
+          loadMoreFailed: false,
         };
       }
       // With articles on screen the failed refresh is reported over them; without articles
@@ -185,7 +206,10 @@ export function reduceNewsState(state: NewsState, action: NewsAction): NewsState
         notice: state.groups.length > 0 ? loadFailedNotice(action.error) : null,
       };
     case 'loadMoreStarted':
-      return { ...state, status: 'loadingMore', error: null };
+      return { ...state, status: 'loadingMore', error: null, loadMoreFailed: false };
+    case 'loadMoreSkipped':
+      // The page added nothing: the list keeps loading, now waiting for the following page.
+      return { ...state, cursor: action.cursor };
     case 'loadMoreSucceeded':
       return {
         ...state,
@@ -196,7 +220,13 @@ export function reduceNewsState(state: NewsState, action: NewsAction): NewsState
         notice: null,
       };
     case 'loadMoreFailed':
-      return { ...state, status: 'error', error: action.error, notice: loadFailedNotice(action.error) };
+      return {
+        ...state,
+        status: 'error',
+        error: action.error,
+        notice: loadFailedNotice(action.error),
+        loadMoreFailed: true,
+      };
     case 'noticeDismissed':
       return state.notice === null ? state : { ...state, notice: null };
     case 'openArticleFailed':
@@ -275,9 +305,10 @@ function toNoticeMessage(notice: NewsNotice, t: I18n['t']): string {
 /**
  * State and actions of the news screen, ready to render: the selected section and the options
  * of the category bar, the groups of cards of its articles and later pages, the message of the
- * last error, when the list was received, the non-blocking notice and the loading of more news;
- * a tap on a card opens the article in the browser. Every load cancels the previous one, whose
- * outcome is discarded, so only the most recent request ever updates the state.
+ * last error, when the list was received, the non-blocking notice and the loading of more news,
+ * with the retry of a page that failed; a tap on a card opens the article in the browser. Every
+ * load cancels the previous one, whose outcome is discarded, so only the most recent request
+ * ever updates the state.
  */
 export function useNewsViewModel(): NewsViewModel {
   const { t, locale } = useI18n();
@@ -364,19 +395,31 @@ export function useNewsViewModel(): NewsViewModel {
     }
     const controller = startRequest();
     dispatch({ type: 'loadMoreStarted' });
-    getSectionArticles(selectedSection, controller.signal, cursor).then(
-      (page) => {
-        if (isCurrent(controller)) {
+    const requestPage = (pageCursor: NewsPageCursor) => {
+      getSectionArticles(selectedSection, controller.signal, pageCursor).then(
+        (page) => {
+          if (!isCurrent(controller)) {
+            return;
+          }
+          // A page that adds nothing leaves the list as it is, so the list would not ask for
+          // the next one by itself: the following page is requested at once. While this
+          // request is the current one, the list is still the one of the call.
+          if (page.next !== undefined && appendGroups(groups, page.groups) === groups) {
+            dispatch({ type: 'loadMoreSkipped', cursor: page.next });
+            requestPage(page.next);
+            return;
+          }
           dispatch({ type: 'loadMoreSucceeded', groups: page.groups, cursor: page.next });
+        },
+        (error: unknown) => {
+          if (isCurrent(controller)) {
+            dispatch({ type: 'loadMoreFailed', error: toNewsError(error) });
+          }
         }
-      },
-      (error: unknown) => {
-        if (isCurrent(controller)) {
-          dispatch({ type: 'loadMoreFailed', error: toNewsError(error) });
-        }
-      }
-    );
-  }, [cursor, hasArticles, isCurrent, selectedSection, startRequest, status]);
+      );
+    };
+    requestPage(cursor);
+  }, [cursor, groups, hasArticles, isCurrent, selectedSection, startRequest, status]);
 
   // Opens the article in the in-app browser, or in a new tab on web, with the system browser
   // as fallback; a tap while another article is opening is ignored.
@@ -425,6 +468,7 @@ export function useNewsViewModel(): NewsViewModel {
     updatedAtLabel: toUpdatedAtLabel(state.updatedAt, t, locale),
     notice: state.notice === null ? null : toNoticeMessage(state.notice, t),
     hasMore: cursor !== undefined,
+    loadMoreFailed: status === 'error' && state.loadMoreFailed,
     selectSection,
     refresh,
     loadMore,

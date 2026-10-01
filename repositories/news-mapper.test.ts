@@ -248,6 +248,14 @@ describe('mapArticles deduplication', () => {
     expect(articles.map((article) => article.title)).toEqual(['First']);
   });
 
+  it('keeps the first of two articles with the same URL also when published on different days', () => {
+    const articles = mapArticles([
+      makeDto({ publishedAt: '2026-09-23T12:30:00Z' }),
+      makeDto({ publishedAt: '2026-09-24T12:30:00Z' }),
+    ]);
+    expect(articles.map((article) => article.publishedAt?.getTime())).toEqual([Date.UTC(2026, 8, 23, 12, 30)]);
+  });
+
   it('deduplicates across the requests of a section, keeping the first position', () => {
     const topHeadlines = [makeDto({ title: 'Headline', url: ARTICLE_URL }), makeDto({ title: 'Other', url: OTHER_URL })];
     const everything = [
@@ -286,7 +294,7 @@ describe('mapArticles deduplication', () => {
   });
 });
 
-describe('mapArticles deduplication by title and source', () => {
+describe('mapArticles deduplication by title, source and day', () => {
   it('keeps the first of two articles with the same title and source on different URLs', () => {
     const articles = mapArticles([makeDto({ url: REGIONAL_URL }), makeDto({ url: ARTICLE_URL })]);
     expect(articles.map((article) => article.id)).toEqual([REGIONAL_URL]);
@@ -353,6 +361,43 @@ describe('mapArticles deduplication by title and source', () => {
       makeDto({ title: 'Updated title', url: REGIONAL_URL }),
     ]);
     expect(articles.map((article) => article.title)).toEqual(['First title']);
+  });
+
+  it('keeps both articles with the same title and source on different URLs published on different days', () => {
+    const title = 'Borsa: Milano chiude in rialzo';
+    const articles = mapArticles([
+      makeDto({ title, url: ARTICLE_URL, publishedAt: '2026-09-23T15:40:00Z' }),
+      makeDto({ title, url: REGIONAL_URL, publishedAt: '2026-09-24T15:40:00Z' }),
+    ]);
+    expect(articles.map((article) => article.id)).toEqual([ARTICLE_URL, REGIONAL_URL]);
+  });
+
+  it('compares the publication days in the device time zone', () => {
+    // The tests run in the Europe/Rome time zone, two hours ahead of UTC in September.
+    const acrossLocalMidnight = mapArticles([
+      makeDto({ url: ARTICLE_URL, publishedAt: '2026-09-23T21:59:00Z' }),
+      makeDto({ url: REGIONAL_URL, publishedAt: '2026-09-23T22:01:00Z' }),
+    ]);
+    expect(acrossLocalMidnight.map((article) => article.id)).toEqual([ARTICLE_URL, REGIONAL_URL]);
+
+    const acrossUtcMidnight = mapArticles([
+      makeDto({ url: ARTICLE_URL, publishedAt: '2026-09-23T23:59:00Z' }),
+      makeDto({ url: REGIONAL_URL, publishedAt: '2026-09-24T00:01:00Z' }),
+    ]);
+    expect(acrossUtcMidnight.map((article) => article.id)).toEqual([ARTICLE_URL]);
+  });
+
+  it('keeps the first of two articles with the same title and source and no readable date', () => {
+    const articles = mapArticles([
+      makeDto({ url: ARTICLE_URL, publishedAt: 'yesterday' }),
+      asDto({ ...makeDto({ url: REGIONAL_URL }), publishedAt: null }),
+    ]);
+    expect(articles.map((article) => article.id)).toEqual([ARTICLE_URL]);
+  });
+
+  it('keeps both articles with the same title and source when only one has a readable date', () => {
+    const articles = mapArticles([makeDto({ url: ARTICLE_URL }), makeDto({ url: REGIONAL_URL, publishedAt: 'yesterday' })]);
+    expect(articles.map((article) => article.id)).toEqual([ARTICLE_URL, REGIONAL_URL]);
   });
 });
 
@@ -573,6 +618,21 @@ describe('mapGroups', () => {
     ]);
   });
 
+  it('keeps an article of a later group with the title and source of an earlier one when published on another day', () => {
+    const groups = mapGroups([
+      { key: 'a', articles: [makeDto({ title: 'Headline', url: ARTICLE_URL, publishedAt: '2026-09-23T12:30:00Z' })] },
+      {
+        key: 'b',
+        articles: [
+          makeDto({ title: 'headline', url: REGIONAL_URL, publishedAt: '2026-09-24T12:30:00Z' }),
+          makeDto({ title: 'headline', url: THIRD_URL, publishedAt: '2026-09-23T18:00:00Z' }),
+        ],
+      },
+    ]);
+
+    expect(groups.map((group) => group.articles.map((article) => article.id))).toEqual([[ARTICLE_URL], [REGIONAL_URL]]);
+  });
+
   it('drops a group left without articles and returns no group for no articles', () => {
     const groups = mapGroups([
       { key: 'a', articles: [] },
@@ -600,6 +660,10 @@ describe('mapGroups', () => {
 describe('appendGroups', () => {
   function makeArticle(title: string, url: string, sourceName = 'ANSA.it'): Article {
     return { id: url, title, url, sourceName };
+  }
+
+  function makeDatedArticle(title: string, url: string, publishedAt: string): Article {
+    return { ...makeArticle(title, url), publishedAt: new Date(publishedAt) };
   }
 
   function group(key: string, ...articles: Article[]): NewsGroup {
@@ -668,6 +732,19 @@ describe('appendGroups', () => {
     expect(appendGroups(current, [group('more')])).toBe(current);
     expect(appendGroups(current, [duplicates])).toBe(current);
     expect(appendGroups(current, [group('more', third)])).not.toBe(current);
+  });
+
+  it('drops an article with the title and source of one in the list only when published on the same day', () => {
+    const daily = makeDatedArticle('Daily report', 'https://example.com/daily/23', '2026-09-23T07:00:00Z');
+    const sameDay = makeDatedArticle('Daily report', 'https://example.com/regional/daily/23', '2026-09-23T18:00:00Z');
+    const nextDay = makeDatedArticle('Daily report', 'https://example.com/daily/24', '2026-09-24T07:00:00Z');
+    const current = [group('top', first, daily)];
+
+    expect(appendGroups(current, [group('more', sameDay)])).toBe(current);
+    expect(appendGroups(current, [group('more', sameDay, nextDay)])).toEqual([
+      group('top', first, daily),
+      group('more', nextDay),
+    ]);
   });
 
   it('drops the second ANSA editions of a later page, as mapGroups does within one page', () => {
