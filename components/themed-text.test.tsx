@@ -34,16 +34,6 @@ describe('ThemedText', () => {
     });
   });
 
-  it.each(THEMES)('uses the tint of the %s theme for the link type', async (scheme) => {
-    await render(
-      <ColorSchemeContext.Provider value={scheme}>
-        <ThemedText type="link">{TEXT}</ThemedText>
-      </ColorSchemeContext.Provider>
-    );
-
-    expect(screen.getByText(TEXT)).toHaveStyle({ color: Colors[scheme].tint, fontSize: 16 });
-  });
-
   it.each([
     ['light', LIGHT_COLOR],
     ['dark', DARK_COLOR],

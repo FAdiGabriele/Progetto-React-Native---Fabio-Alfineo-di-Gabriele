@@ -1,4 +1,4 @@
-import { Pressable, ScrollView, StyleSheet } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet } from 'react-native';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -26,11 +26,15 @@ export function CategoryChips<Key extends string>({
   const card = useThemeColor({}, 'card');
   const border = useThemeColor({}, 'border');
   const text = useThemeColor({}, 'text');
+  // On web the selected state belongs to tabs, not to buttons; Android and iOS announce a
+  // selected button, while a tab has no trait on iOS.
+  const isWeb = Platform.OS === 'web';
 
   return (
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
+      accessibilityRole={isWeb ? 'tablist' : undefined}
       style={styles.scrollView}
       contentContainerStyle={[
         styles.content,
@@ -40,6 +44,7 @@ export function CategoryChips<Key extends string>({
       {options.map((option) => (
         <Chip
           key={option.key}
+          role={isWeb ? 'tab' : 'button'}
           label={option.label}
           selected={option.key === selectedKey}
           onPress={() => {
@@ -59,6 +64,7 @@ export function CategoryChips<Key extends string>({
 }
 
 type ChipProps = {
+  role: 'tab' | 'button';
   label: string;
   selected: boolean;
   onPress: () => void;
@@ -69,11 +75,11 @@ type ChipProps = {
   text: string;
 };
 
-function Chip({ label, selected, onPress, tint, onTint, card, border, text }: ChipProps) {
+function Chip({ role, label, selected, onPress, tint, onTint, card, border, text }: ChipProps) {
   return (
     <Pressable
       hitSlop={4}
-      accessibilityRole="button"
+      accessibilityRole={role}
       accessibilityLabel={label}
       aria-selected={selected}
       onPress={onPress}

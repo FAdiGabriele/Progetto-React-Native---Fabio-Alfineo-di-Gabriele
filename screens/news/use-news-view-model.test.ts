@@ -31,7 +31,7 @@ jest.mock('@/i18n/i18n-provider', () => {
       params?.[name] === undefined ? placeholder : String(params[name])
     );
   return {
-    useI18n: () => ({ language: 'it', locale: 'it-IT', t: translate, toggleLanguage: jest.fn() }),
+    useI18n: () => ({ language: 'it', locale: 'it-IT', t: translate, setLanguage: jest.fn() }),
   };
 });
 
@@ -570,6 +570,11 @@ const LIMIT_ERRORS: { kind: NewsErrorKind; message: string }[] = [
   { kind: 'resultsLimit', message: 'Raggiunto il limite di notizie disponibili per questa categoria.' },
 ];
 
+const CONFIGURATION_ERRORS: { kind: NewsErrorKind; message: string }[] = [
+  { kind: 'auth', message: 'Il servizio notizie non è disponibile.' },
+  { kind: 'badRequest', message: 'Il servizio notizie non è disponibile.' },
+];
+
 const loaded = (page: NewsPage): LoadSectionNewsResult => ({ ok: true, page });
 
 const failed = (kind: NewsErrorKind, saved: SavedNews | null = null): LoadSectionNewsResult => ({
@@ -644,7 +649,7 @@ describe('useNewsViewModel', () => {
       accessibilityLabel: 'Apri notizia: Title first, ANSA.it',
       onPress: expect.any(Function),
     });
-    expect(current.updatedAtLabel).toMatch(/^Aggiornato alle \d{2}:\d{2}$/);
+    expect(current.updatedAtLabel).toMatch(/^Ultimo controllo alle \d{2}:\d{2}$/);
     expect(current.errorMessage).toBeNull();
     expect(current.notice).toBeNull();
     expect(current.hasMore).toBe(true);
@@ -673,7 +678,7 @@ describe('useNewsViewModel', () => {
     expect(result.current.notice).toBe(`Alcune notizie non sono state caricate. ${NETWORK_MESSAGE}`);
     expect(result.current.errorMessage).toBe(NETWORK_MESSAGE);
     expect(result.current.groups).toHaveLength(1);
-    expect(result.current.updatedAtLabel).toMatch(/^Aggiornato alle /);
+    expect(result.current.updatedAtLabel).toMatch(/^Ultimo controllo alle /);
 
     await act(async () => result.current.dismissNotice());
 
@@ -694,7 +699,7 @@ describe('useNewsViewModel', () => {
     expect(result.current.hasMore).toBe(false);
   });
 
-  it.each(LIMIT_ERRORS)(
+  it.each([...LIMIT_ERRORS, ...CONFIGURATION_ERRORS])(
     'shows the $kind message in the error state when the first page fails without a saved list',
     async ({ kind, message }) => {
       loadSectionNews.mockResolvedValueOnce(failed(kind));
@@ -707,7 +712,7 @@ describe('useNewsViewModel', () => {
     }
   );
 
-  it.each(LIMIT_ERRORS)(
+  it.each([...LIMIT_ERRORS, ...CONFIGURATION_ERRORS])(
     'reports a $kind error inside the partial notice of a first page and alone for a failed page of more news',
     async ({ kind, message }) => {
       const { result } = await renderLoaded({ groups: [FRONT_PAGES], next: { page: 1 }, partialError: new NewsError(kind) });
@@ -741,7 +746,7 @@ describe('useNewsViewModel', () => {
     await waitFor(() => expect(result.current.status).toBe('error'));
 
     expect(result.current.groups.map((group) => group.title)).toEqual(['Prime pagine', 'Ultime da ANSA']);
-    expect(result.current.updatedAtLabel).toBe('Aggiornato il 29 set 2026, 10:00');
+    expect(result.current.updatedAtLabel).toBe('Ultimo controllo il 29 set 2026, 10:00');
     expect(result.current.notice).toBe(NETWORK_MESSAGE);
     expect(result.current.errorMessage).toBe(NETWORK_MESSAGE);
     expect(result.current.hasMore).toBe(false);

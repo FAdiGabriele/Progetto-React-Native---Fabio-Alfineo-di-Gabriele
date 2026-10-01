@@ -27,10 +27,11 @@ export function NewsImage({ imageUrl }: NewsImageProps) {
     );
   }
 
+  // The placeholder color fills the frame until the image is loaded.
   return (
     <Image
       source={{ uri: imageUrl }}
-      style={styles.size}
+      style={[styles.size, { backgroundColor: placeholderColor }]}
       contentFit="cover"
       cachePolicy="disk"
       transition={200}

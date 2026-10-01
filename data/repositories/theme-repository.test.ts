@@ -14,7 +14,10 @@ beforeEach(() => {
 });
 
 describe('themeRepository.getSavedTheme', () => {
-  it('returns the saved theme when it is "light" or "dark"', async () => {
+  it('returns the saved preference when it is "system", "light" or "dark"', async () => {
+    readThemeMock.mockResolvedValueOnce('system');
+    await expect(themeRepository.getSavedTheme()).resolves.toBe('system');
+
     readThemeMock.mockResolvedValueOnce('light');
     await expect(themeRepository.getSavedTheme()).resolves.toBe('light');
 
@@ -22,14 +25,14 @@ describe('themeRepository.getSavedTheme', () => {
     await expect(themeRepository.getSavedTheme()).resolves.toBe('dark');
   });
 
-  it('returns null when no theme is saved', async () => {
+  it('returns null when no preference is saved', async () => {
     readThemeMock.mockResolvedValueOnce(null);
 
     await expect(themeRepository.getSavedTheme()).resolves.toBeNull();
   });
 
-  it('returns null for a saved value that is not exactly a supported theme', async () => {
-    for (const value of ['Dark', 'light ', 'system', '']) {
+  it('returns null for a saved value that is not exactly a supported preference', async () => {
+    for (const value of ['Dark', 'light ', 'System', 'auto', 'unspecified', '']) {
       readThemeMock.mockResolvedValueOnce(value);
 
       await expect(themeRepository.getSavedTheme()).resolves.toBeNull();
@@ -44,13 +47,13 @@ describe('themeRepository.getSavedTheme', () => {
 });
 
 describe('themeRepository.saveTheme', () => {
-  it('writes the theme to the storage', async () => {
+  it.each(['system', 'light', 'dark'] as const)('writes the %s preference to the storage', async (preference) => {
     writeThemeMock.mockResolvedValueOnce(undefined);
 
-    await expect(themeRepository.saveTheme('dark')).resolves.toBeUndefined();
+    await expect(themeRepository.saveTheme(preference)).resolves.toBeUndefined();
 
     expect(writeThemeMock).toHaveBeenCalledTimes(1);
-    expect(writeThemeMock).toHaveBeenCalledWith('dark');
+    expect(writeThemeMock).toHaveBeenCalledWith(preference);
   });
 
   it('rejects with the storage error when the write fails', async () => {

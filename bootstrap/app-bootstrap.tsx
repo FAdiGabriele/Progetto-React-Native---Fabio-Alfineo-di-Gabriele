@@ -3,11 +3,11 @@ import { useEffect, useState, type ReactNode } from 'react';
 
 import { languageRepository, themeRepository } from '@/container';
 import type { Language } from '@/domain/models/language-model';
-import type { Theme } from '@/domain/models/theme-model';
+import type { ThemePreference } from '@/domain/models/theme-model';
 import { I18nProvider } from '@/i18n/i18n-provider';
 import { ThemePreferenceProvider } from '@/theme/theme-preference-provider';
 
-type SavedPreferences = { theme: Theme | null; language: Language | null };
+type SavedPreferences = { theme: ThemePreference | null; language: Language | null };
 
 // Called while the module loads, before the first render: later the splash screen may be gone.
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -22,9 +22,9 @@ async function readSavedPreferences(): Promise<SavedPreferences> {
 }
 
 /**
- * Startup of the app: reads the saved theme and the saved language together while the native
- * splash screen stays visible, then renders its children inside the theme and language
- * providers and hides the splash screen, so the first screen already has both.
+ * Startup of the app: reads the saved theme preference and the saved language together while
+ * the native splash screen stays visible, then renders its children inside the theme and
+ * language providers and hides the splash screen, so the first screen already has both.
  */
 export function AppBootstrap({ children }: { children: ReactNode }) {
   const [preferences, setPreferences] = useState<SavedPreferences | null>(null);
@@ -52,7 +52,7 @@ export function AppBootstrap({ children }: { children: ReactNode }) {
     return null;
   }
   return (
-    <ThemePreferenceProvider initialTheme={preferences.theme}>
+    <ThemePreferenceProvider initialPreference={preferences.theme}>
       <I18nProvider initialLanguage={preferences.language}>{children}</I18nProvider>
     </ThemePreferenceProvider>
   );

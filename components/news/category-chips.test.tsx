@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
-import { StyleSheet } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import {
@@ -54,6 +54,10 @@ function contentStyle() {
 }
 
 describe('CategoryChips', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it('renders one button per option, in order, named and labelled by the option label', async () => {
     await render(chipsElement());
 
@@ -64,6 +68,15 @@ describe('CategoryChips', () => {
     }
   });
 
+  it.each(['ios', 'android'] as const)('keeps the chips as plain buttons, without tab roles, on %s', async (os) => {
+    jest.replaceProperty(Platform, 'OS', os);
+    await render(chipsElement());
+
+    expect(screen.getAllByRole('button')).toHaveLength(OPTIONS.length);
+    expect(screen.queryByRole('tab')).toBeNull();
+    expect(screen.root?.props.accessibilityRole).toBeUndefined();
+  });
+
   it('marks only the selected chip as selected', async () => {
     await render(chipsElement({ selectedKey: 'world' }));
 
@@ -71,6 +84,42 @@ describe('CategoryChips', () => {
     expect(chip('Italy')).not.toBeSelected();
     expect(chip('Sport')).not.toBeSelected();
     expect(screen.getAllByRole('button', { selected: true })).toHaveLength(1);
+  });
+
+  describe('on web', () => {
+    beforeEach(() => {
+      jest.replaceProperty(Platform, 'OS', 'web');
+    });
+
+    it('exposes the scroll view as a tab list and every chip as one of its tabs', async () => {
+      await render(chipsElement());
+
+      expect(screen.root).toHaveProp('accessibilityRole', 'tablist');
+      const tabs = screen.getAllByRole('tab');
+      expect(tabs.map((element) => element.props.accessibilityLabel)).toEqual(['Italy', 'World', 'Sport']);
+      for (const element of tabs) {
+        expect(screen.root).toContainElement(element);
+      }
+      expect(screen.queryByRole('button')).toBeNull();
+    });
+
+    it('marks only the selected tab as selected', async () => {
+      await render(chipsElement({ selectedKey: 'world' }));
+
+      expect(screen.getByRole('tab', { name: 'World' })).toBeSelected();
+      expect(screen.getAllByRole('tab', { selected: true })).toHaveLength(1);
+    });
+
+    it('calls onSelect with the key of a pressed unselected tab and ignores the selected one', async () => {
+      const onSelect = jest.fn();
+      await render(chipsElement({ onSelect }));
+
+      await fireEvent.press(screen.getByRole('tab', { name: 'Italy' }));
+      await fireEvent.press(screen.getByRole('tab', { name: 'Sport' }));
+
+      expect(onSelect).toHaveBeenCalledTimes(1);
+      expect(onSelect).toHaveBeenCalledWith('sport');
+    });
   });
 
   it('calls onSelect with the key of a pressed unselected chip', async () => {

@@ -1,54 +1,62 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Appearance, Platform } from 'react-native';
+import { Appearance, Platform, useColorScheme as useDeviceColorScheme } from 'react-native';
 
 import { themeRepository } from '@/container';
-import type { Theme } from '@/domain/models/theme-model';
+import type { Theme, ThemePreference } from '@/domain/models/theme-model';
 import { ColorSchemeContext } from '@/hooks/use-color-scheme';
 
-export type ThemePreference = {
+export type ThemePreferenceValue = {
+  /** Choice made in the settings: one of the two themes, or the theme of the device. */
+  preference: ThemePreference;
+  /** Theme shown by the interface: the chosen one or, with the "system" choice, the one of the device. */
   theme: Theme;
-  /** Switches to the other theme at once, then saves it; a failed save is ignored. */
-  toggleTheme: () => void;
+  /** Applies the preference at once, then saves it; a failed save is ignored. */
+  setPreference: (preference: ThemePreference) => void;
 };
 
-const DEFAULT_THEME: Theme = 'dark';
+const DEFAULT_PREFERENCE: ThemePreference = 'system';
 
-const OTHER_THEME: Record<Theme, Theme> = { light: 'dark', dark: 'light' };
-
-const ThemePreferenceContext = createContext<ThemePreference | null>(null);
+const ThemePreferenceContext = createContext<ThemePreferenceValue | null>(null);
 
 /**
- * Provides the chosen theme to its children, starting from the saved theme read at startup;
- * without a valid saved value the theme is dark. On Android and iOS the theme is also
- * applied to the system elements, such as alerts.
+ * Provides the active theme to its children, starting from the saved preference read at
+ * startup; without a valid saved value the app follows the theme of the device, also while
+ * it changes. On Android and iOS the preference is also applied to the system elements,
+ * such as alerts.
  */
 export function ThemePreferenceProvider({
-  initialTheme,
+  initialPreference,
   children,
 }: {
-  /** Saved theme, or null when there is no valid one. */
-  initialTheme: Theme | null;
+  /** Saved theme preference, or null when there is no valid one. */
+  initialPreference: ThemePreference | null;
   children: ReactNode;
 }) {
-  const [theme, setTheme] = useState<Theme>(initialTheme ?? DEFAULT_THEME);
+  const [preference, setPreferenceState] = useState<ThemePreference>(
+    initialPreference ?? DEFAULT_PREFERENCE
+  );
+  const deviceScheme = useDeviceColorScheme();
+  const deviceTheme: Theme = deviceScheme === 'dark' ? 'dark' : 'light';
+  const theme = preference === 'system' ? deviceTheme : preference;
 
+  // "unspecified" removes the override, so the device theme is readable again.
   // react-native-web has no Appearance.setColorScheme: on web the context is enough.
   useEffect(() => {
     if (Platform.OS !== 'web') {
-      Appearance.setColorScheme(theme);
+      Appearance.setColorScheme(preference === 'system' ? 'unspecified' : preference);
     }
-  }, [theme]);
+  }, [preference]);
 
-  const value = useMemo<ThemePreference>(
+  const value = useMemo<ThemePreferenceValue>(
     () => ({
+      preference,
       theme,
-      toggleTheme: () => {
-        const next = OTHER_THEME[theme];
-        setTheme(next);
+      setPreference: (next) => {
+        setPreferenceState(next);
         themeRepository.saveTheme(next).catch(() => {});
       },
     }),
-    [theme]
+    [preference, theme]
   );
 
   return (
@@ -58,7 +66,7 @@ export function ThemePreferenceProvider({
   );
 }
 
-export function useThemePreference(): ThemePreference {
+export function useThemePreference(): ThemePreferenceValue {
   const value = useContext(ThemePreferenceContext);
   if (value === null) {
     throw new Error('useThemePreference must be used within a ThemePreferenceProvider');

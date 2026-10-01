@@ -6,7 +6,10 @@ export type ColorScheme = 'light' | 'dark';
 /** Active theme, provided by the theme preference provider; dark without a provider. */
 export const ColorSchemeContext = createContext<ColorScheme>('dark');
 
-/** Theme chosen by the user, on every platform, instead of the system theme. */
+/**
+ * Active theme, on every platform: the one chosen in the settings or, when the choice is to
+ * follow the device, the theme of the device.
+ */
 export function useColorScheme(): ColorScheme {
   return useContext(ColorSchemeContext);
 }

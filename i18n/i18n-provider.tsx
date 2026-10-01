@@ -14,8 +14,8 @@ export type I18n = {
   locale: Locale;
   /** Text of `key` in the current language, with `{name}` placeholders replaced by `params.name`. */
   t: (key: TranslationKey, params?: TranslationParams) => string;
-  /** Switches to the other language at once, then saves it; a failed save is ignored. */
-  toggleLanguage: () => void;
+  /** Switches to the language at once, then saves it; a failed save is ignored. */
+  setLanguage: (language: Language) => void;
 };
 
 const DEFAULT_LANGUAGE: Language = 'it';
@@ -23,8 +23,6 @@ const DEFAULT_LANGUAGE: Language = 'it';
 const DICTIONARIES: Record<Language, Dictionary> = { it, en };
 
 const LOCALES: Record<Language, Locale> = { it: 'it-IT', en: 'en-US' };
-
-const OTHER_LANGUAGE: Record<Language, Language> = { it: 'en', en: 'it' };
 
 const PLACEHOLDER_PATTERN = /\{(\w+)\}/g;
 
@@ -53,16 +51,15 @@ export function I18nProvider({
   initialLanguage: Language | null;
   children: ReactNode;
 }) {
-  const [language, setLanguage] = useState<Language>(initialLanguage ?? DEFAULT_LANGUAGE);
+  const [language, setLanguageState] = useState<Language>(initialLanguage ?? DEFAULT_LANGUAGE);
 
   const value = useMemo<I18n>(
     () => ({
       language,
       locale: LOCALES[language],
       t: (key, params) => translate(DICTIONARIES[language], key, params),
-      toggleLanguage: () => {
-        const next = OTHER_LANGUAGE[language];
-        setLanguage(next);
+      setLanguage: (next) => {
+        setLanguageState(next);
         languageRepository.saveLanguage(next).catch(() => {});
       },
     }),

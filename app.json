@@ -2,8 +2,8 @@
   "expo": {
     "name": "News App",
     "slug": "news-app",
-    "version": "0.30.15",
-    "orientation": "portrait",
+    "version": "0.30.23",
+    "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "newsapp",
     "userInterfaceStyle": "automatic",

@@ -1,11 +1,11 @@
 import { act, fireEvent, render, renderHook, screen } from '@testing-library/react-native';
 import * as SplashScreen from 'expo-splash-screen';
-import { Appearance, Platform, Pressable, Text } from 'react-native';
+import { Appearance, DeviceEventEmitter, Platform, Pressable, Text } from 'react-native';
 
 import { AppBootstrap } from '@/bootstrap/app-bootstrap';
 import { languageRepository, themeRepository } from '@/container';
 import type { Language } from '@/domain/models/language-model';
-import type { Theme } from '@/domain/models/theme-model';
+import type { Theme, ThemePreference } from '@/domain/models/theme-model';
 import { useI18n } from '@/i18n/i18n-provider';
 import { useThemePreference } from '@/theme/theme-preference-provider';
 
@@ -29,7 +29,33 @@ jest.mock('expo-splash-screen', () => {
   };
 });
 
+// The preset replaces useColorScheme with a fixed light theme: the real hook reads and follows
+// the device theme through Appearance, as in the app.
+jest.unmock('react-native/Libraries/Utilities/useColorScheme');
+
+// The native Appearance module, missing in Jest: it reports the color scheme of the device.
+jest.mock('react-native/Libraries/Utilities/NativeAppearance', () => {
+  const device: { colorScheme: string | null; setColorScheme: (style: string) => void } = {
+    colorScheme: 'light',
+    setColorScheme: () => undefined,
+  };
+  return {
+    __esModule: true,
+    default: {
+      getColorScheme: () => device.colorScheme,
+      setColorScheme: (style: string) => device.setColorScheme(style),
+      addListener: () => undefined,
+      removeListeners: () => undefined,
+    },
+    device,
+  };
+});
+
+// The theme every themed component reads; bootstrap files do not import hooks.
+const { useColorScheme } = jest.requireActual<typeof import('@/hooks/use-color-scheme')>('@/hooks/use-color-scheme');
+
 type Deferred<T> = { promise: Promise<T>; resolve: (value: T) => void; reject: (error: unknown) => void };
+type DeviceColorScheme = Theme | 'unspecified' | null;
 
 const getSavedThemeMock = jest.mocked(themeRepository.getSavedTheme);
 const getSavedLanguageMock = jest.mocked(languageRepository.getSavedLanguage);
@@ -38,12 +64,19 @@ const saveLanguageMock = jest.mocked(languageRepository.saveLanguage);
 const preventAutoHideAsyncMock = jest.mocked(SplashScreen.preventAutoHideAsync);
 const hideAsyncMock = jest.mocked(SplashScreen.hideAsync);
 const { loadCall } = jest.requireMock<{ loadCall: { reject?: (error: Error) => void } }>('expo-splash-screen');
+const { device } = jest.requireMock<{
+  device: { colorScheme: DeviceColorScheme; setColorScheme: (style: string) => void };
+}>('react-native/Libraries/Utilities/NativeAppearance');
 
 // What the module did with the splash screen while loading, before any test clears the mocks.
 const SPLASH_SCREEN_CALLS_AT_LOAD = {
   preventAutoHideAsync: preventAutoHideAsyncMock.mock.calls.length,
   hideAsync: hideAsyncMock.mock.calls.length,
 };
+
+const PREFERENCES: readonly ThemePreference[] = ['system', 'light', 'dark'];
+const LANGUAGES: readonly Language[] = ['it', 'en'];
+const LANGUAGE_TEXTS: Record<Language, string> = { it: 'it it-IT Impostazioni', en: 'en en-US Settings' };
 
 function defer<T>(): Deferred<T> {
   let resolve!: (value: T) => void;
@@ -62,19 +95,41 @@ async function letRejectionsSurface(): Promise<void> {
   });
 }
 
+// Waits for the events that the native module sends after a call.
+async function letNativeEventsArrive(): Promise<void> {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
+// What the native module does when the theme of the device changes.
+function setDeviceTheme(colorScheme: DeviceColorScheme): void {
+  device.colorScheme = colorScheme;
+  DeviceEventEmitter.emit('appearanceChanged', { colorScheme });
+}
+
+async function changeDeviceTheme(colorScheme: DeviceColorScheme): Promise<void> {
+  await act(async () => setDeviceTheme(colorScheme));
+}
+
 function PreferencesProbe() {
-  const { theme, toggleTheme } = useThemePreference();
-  const { language, locale, t, toggleLanguage } = useI18n();
+  const { preference, theme, setPreference } = useThemePreference();
+  const colorScheme = useColorScheme();
+  const { language, locale, t, setLanguage } = useI18n();
 
   return (
     <>
-      <Text testID="preferences">{`${theme} ${language} ${locale} ${t('settings.title')}`}</Text>
-      <Pressable accessibilityRole="button" onPress={toggleTheme}>
-        <Text>Toggle theme</Text>
-      </Pressable>
-      <Pressable accessibilityRole="button" onPress={toggleLanguage}>
-        <Text>Toggle language</Text>
-      </Pressable>
+      <Text testID="preferences">{`${preference} ${theme} ${colorScheme} ${language} ${locale} ${t('settings.title')}`}</Text>
+      {PREFERENCES.map((next) => (
+        <Pressable key={next} accessibilityRole="button" onPress={() => setPreference(next)}>
+          <Text>{`Theme ${next}`}</Text>
+        </Pressable>
+      ))}
+      {LANGUAGES.map((next) => (
+        <Pressable key={next} accessibilityRole="button" onPress={() => setLanguage(next)}>
+          <Text>{`Language ${next}`}</Text>
+        </Pressable>
+      ))}
     </>
   );
 }
@@ -90,8 +145,15 @@ async function renderBootstrap(): Promise<void> {
 }
 
 const shownPreferences = () => screen.getByTestId('preferences');
-const toggleTheme = () => fireEvent.press(screen.getByRole('button', { name: 'Toggle theme' }));
-const toggleLanguage = () => fireEvent.press(screen.getByRole('button', { name: 'Toggle language' }));
+const choosePreference = (preference: ThemePreference) =>
+  fireEvent.press(screen.getByRole('button', { name: `Theme ${preference}` }));
+const chooseLanguage = (language: Language) =>
+  fireEvent.press(screen.getByRole('button', { name: `Language ${language}` }));
+
+// The preference, the active theme of both contexts, the language with its locale and a translated text.
+function expectShown(preference: ThemePreference, theme: Theme, language: Language): void {
+  expect(shownPreferences()).toHaveTextContent(`${preference} ${theme} ${theme} ${LANGUAGE_TEXTS[language]}`);
+}
 
 describe('the bootstrap module', () => {
   it('keeps the splash screen from the moment it loads, before any render and any hideAsync', () => {
@@ -110,6 +172,8 @@ describe('AppBootstrap', () => {
     saveThemeMock.mockResolvedValue(undefined);
     saveLanguageMock.mockResolvedValue(undefined);
     hideAsyncMock.mockResolvedValue(undefined);
+    device.setColorScheme = () => undefined;
+    setDeviceTheme('light');
     setColorScheme = jest.spyOn(Appearance, 'setColorScheme').mockImplementation(() => undefined);
     consoleError = jest.spyOn(console, 'error');
   });
@@ -120,8 +184,8 @@ describe('AppBootstrap', () => {
     expect(errors).toEqual([]);
   });
 
-  it('starts reading the saved theme and the saved language together and renders nothing meanwhile', async () => {
-    const theme = defer<Theme | null>();
+  it('starts reading the saved theme preference and the saved language together and renders nothing meanwhile', async () => {
+    const theme = defer<ThemePreference | null>();
     const language = defer<Language | null>();
     getSavedThemeMock.mockReturnValue(theme.promise);
     getSavedLanguageMock.mockReturnValue(language.promise);
@@ -137,11 +201,11 @@ describe('AppBootstrap', () => {
   it.each(['theme', 'language'] as const)(
     'renders nothing and keeps the splash screen until both reads are over, when the %s arrives first',
     async (first) => {
-      const theme = defer<Theme | null>();
+      const theme = defer<ThemePreference | null>();
       const language = defer<Language | null>();
       getSavedThemeMock.mockReturnValue(theme.promise);
       getSavedLanguageMock.mockReturnValue(language.promise);
-      const resolveTheme = () => theme.resolve('light');
+      const resolveTheme = () => theme.resolve('dark');
       const resolveLanguage = () => language.resolve('en');
       const [resolveFirst, resolveSecond] =
         first === 'theme' ? [resolveTheme, resolveLanguage] : [resolveLanguage, resolveTheme];
@@ -154,77 +218,128 @@ describe('AppBootstrap', () => {
 
       await act(async () => resolveSecond());
 
-      expect(shownPreferences()).toHaveTextContent('light en en-US Settings');
+      expectShown('dark', 'dark', 'en');
       expect(hideAsyncMock).toHaveBeenCalledTimes(1);
     }
   );
 
   it.each([
-    { theme: 'light', language: 'it', shown: 'light it it-IT Impostazioni' },
-    { theme: 'dark', language: 'en', shown: 'dark en en-US Settings' },
+    { preference: 'light', device: 'dark', language: 'it', theme: 'light' },
+    { preference: 'dark', device: 'light', language: 'en', theme: 'dark' },
+    { preference: 'system', device: 'dark', language: 'it', theme: 'dark' },
+    { preference: 'system', device: 'light', language: 'en', theme: 'light' },
   ] as const)(
-    'renders the children with the saved $theme theme and $language language and hides the splash screen',
-    async ({ theme, language, shown }) => {
-      getSavedThemeMock.mockResolvedValue(theme);
+    'renders the children with the saved $preference preference on a $device device and $language, and hides the splash screen',
+    async ({ preference, device: deviceTheme, language, theme }) => {
+      setDeviceTheme(deviceTheme);
+      getSavedThemeMock.mockResolvedValue(preference);
       getSavedLanguageMock.mockResolvedValue(language);
 
       await renderBootstrap();
 
-      expect(shownPreferences()).toHaveTextContent(shown);
+      expectShown(preference, theme, language);
       expect(hideAsyncMock).toHaveBeenCalledTimes(1);
       expect(hideAsyncMock).toHaveBeenCalledWith();
     }
   );
 
-  it('starts with the dark theme and Italian when nothing is saved', async () => {
+  it.each(['light', 'dark'] as const)(
+    'follows the %s theme of the device and starts in Italian when nothing is saved',
+    async (deviceTheme) => {
+      setDeviceTheme(deviceTheme);
+
+      await renderBootstrap();
+
+      expectShown('system', deviceTheme, 'it');
+      expect(hideAsyncMock).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it.each(['light', 'dark'] as const)(
+    'follows the %s theme of the device and starts in Italian when both reads fail',
+    async (deviceTheme) => {
+      setDeviceTheme(deviceTheme);
+      getSavedThemeMock.mockRejectedValue(new Error('storage read failed'));
+      getSavedLanguageMock.mockRejectedValue(new Error('storage read failed'));
+
+      await renderBootstrap();
+      await letRejectionsSurface();
+
+      expectShown('system', deviceTheme, 'it');
+      expect(hideAsyncMock).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it.each([null, 'unspecified'] as const)('uses the light theme when the device reports %s', async (colorScheme) => {
+    setDeviceTheme(colorScheme);
+
     await renderBootstrap();
 
-    expect(shownPreferences()).toHaveTextContent('dark it it-IT Impostazioni');
-    expect(hideAsyncMock).toHaveBeenCalledTimes(1);
+    expectShown('system', 'light', 'it');
   });
+
+  it('follows every change of the device theme while the preference is system', async () => {
+    await renderBootstrap();
+    expectShown('system', 'light', 'it');
+
+    await changeDeviceTheme('dark');
+    expectShown('system', 'dark', 'it');
+
+    await changeDeviceTheme('light');
+    expectShown('system', 'light', 'it');
+  });
+
+  it.each(['light', 'dark'] as const)(
+    'keeps the %s theme while the device theme changes, and follows the device again once system is chosen',
+    async (preference) => {
+      getSavedThemeMock.mockResolvedValue(preference);
+      await renderBootstrap();
+
+      await changeDeviceTheme('dark');
+      expectShown(preference, preference, 'it');
+      await changeDeviceTheme('light');
+      expectShown(preference, preference, 'it');
+      await changeDeviceTheme('dark');
+      expectShown(preference, preference, 'it');
+
+      await choosePreference('system');
+      expectShown('system', 'dark', 'it');
+    }
+  );
 
   it('hides the splash screen only once, also after a new render and a change of theme and language', async () => {
     await renderBootstrap();
     await screen.rerender(bootstrapWithProbe());
-    await toggleTheme();
-    await toggleLanguage();
+    await choosePreference('dark');
+    await chooseLanguage('en');
+    await changeDeviceTheme('dark');
 
-    expect(shownPreferences()).toHaveTextContent('light en en-US Settings');
+    expectShown('dark', 'dark', 'en');
     expect(hideAsyncMock).toHaveBeenCalledTimes(1);
     expect(getSavedThemeMock).toHaveBeenCalledTimes(1);
     expect(getSavedLanguageMock).toHaveBeenCalledTimes(1);
   });
 
   it('counts a failed theme read as nothing saved, without blocking the language read', async () => {
+    setDeviceTheme('dark');
     getSavedThemeMock.mockRejectedValue(new Error('storage read failed'));
     getSavedLanguageMock.mockResolvedValue('en');
 
     await renderBootstrap();
     await letRejectionsSurface();
 
-    expect(shownPreferences()).toHaveTextContent('dark en en-US Settings');
+    expectShown('system', 'dark', 'en');
     expect(hideAsyncMock).toHaveBeenCalledTimes(1);
   });
 
   it('counts a failed language read as nothing saved, without blocking the theme read', async () => {
-    getSavedThemeMock.mockResolvedValue('light');
+    getSavedThemeMock.mockResolvedValue('dark');
     getSavedLanguageMock.mockRejectedValue(new Error('storage read failed'));
 
     await renderBootstrap();
     await letRejectionsSurface();
 
-    expect(shownPreferences()).toHaveTextContent('light it it-IT Impostazioni');
-    expect(hideAsyncMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('starts with the dark theme and Italian when both reads fail', async () => {
-    getSavedThemeMock.mockRejectedValue(new Error('storage read failed'));
-    getSavedLanguageMock.mockRejectedValue(new Error('storage read failed'));
-
-    await renderBootstrap();
-    await letRejectionsSurface();
-
-    expect(shownPreferences()).toHaveTextContent('dark it it-IT Impostazioni');
+    expectShown('dark', 'dark', 'it');
     expect(hideAsyncMock).toHaveBeenCalledTimes(1);
   });
 
@@ -234,7 +349,7 @@ describe('AppBootstrap', () => {
     await renderBootstrap();
     await letRejectionsSurface();
 
-    expect(shownPreferences()).toHaveTextContent('dark it it-IT Impostazioni');
+    expectShown('system', 'light', 'it');
     expect(hideAsyncMock).toHaveBeenCalledTimes(1);
   });
 
@@ -245,12 +360,12 @@ describe('AppBootstrap', () => {
     await renderBootstrap();
     await letRejectionsSurface();
 
-    expect(shownPreferences()).toHaveTextContent('dark it it-IT Impostazioni');
+    expectShown('system', 'light', 'it');
     expect(hideAsyncMock).toHaveBeenCalledTimes(1);
   });
 
   it('leaves its state and the splash screen alone when unmounted before the reads are over', async () => {
-    const theme = defer<Theme | null>();
+    const theme = defer<ThemePreference | null>();
     const language = defer<Language | null>();
     getSavedThemeMock.mockReturnValue(theme.promise);
     getSavedLanguageMock.mockReturnValue(language.promise);
@@ -268,68 +383,83 @@ describe('AppBootstrap', () => {
     expect(hideAsyncMock).not.toHaveBeenCalled();
   });
 
-  it('switches the theme at once with toggleTheme and then saves the new one', async () => {
+  it('applies every preference at once with setPreference and then saves it', async () => {
     const save = defer<void>();
     saveThemeMock.mockReturnValueOnce(save.promise);
-    getSavedThemeMock.mockResolvedValue('light');
+    setDeviceTheme('dark');
     await renderBootstrap();
 
-    await toggleTheme();
+    await choosePreference('light');
 
-    expect(shownPreferences()).toHaveTextContent('dark it it-IT Impostazioni');
-    expect(saveThemeMock.mock.calls).toEqual([['dark']]);
+    expectShown('light', 'light', 'it');
+    expect(saveThemeMock.mock.calls).toEqual([['light']]);
 
     await act(async () => save.resolve());
-    await toggleTheme();
+    await choosePreference('dark');
 
-    expect(shownPreferences()).toHaveTextContent('light it it-IT Impostazioni');
-    expect(saveThemeMock.mock.calls).toEqual([['dark'], ['light']]);
+    expectShown('dark', 'dark', 'it');
+    expect(saveThemeMock.mock.calls).toEqual([['light'], ['dark']]);
+
+    await choosePreference('system');
+
+    expectShown('system', 'dark', 'it');
+    expect(saveThemeMock.mock.calls).toEqual([['light'], ['dark'], ['system']]);
     expect(saveLanguageMock).not.toHaveBeenCalled();
   });
 
-  it('keeps the new theme when it cannot be saved', async () => {
+  it.each(PREFERENCES)('keeps the %s preference when it cannot be saved', async (preference) => {
     saveThemeMock.mockRejectedValue(new Error('storage write failed'));
+    getSavedThemeMock.mockResolvedValue(preference === 'dark' ? 'light' : 'dark');
+    setDeviceTheme('dark');
     await renderBootstrap();
 
-    await toggleTheme();
+    await choosePreference(preference);
     await letRejectionsSurface();
 
-    expect(shownPreferences()).toHaveTextContent('light it it-IT Impostazioni');
-    expect(saveThemeMock).toHaveBeenCalledWith('light');
+    expectShown(preference, preference === 'light' ? 'light' : 'dark', 'it');
+    expect(saveThemeMock.mock.calls).toEqual([[preference]]);
   });
 
-  it('switches the language at once with toggleLanguage and then saves the new one', async () => {
+  it('switches the language at once with setLanguage and then saves it', async () => {
     const save = defer<void>();
     saveLanguageMock.mockReturnValueOnce(save.promise);
+    await renderBootstrap();
+
+    await chooseLanguage('en');
+
+    expectShown('system', 'light', 'en');
+    expect(saveLanguageMock.mock.calls).toEqual([['en']]);
+
+    await act(async () => save.resolve());
+    await chooseLanguage('it');
+
+    expectShown('system', 'light', 'it');
+    expect(saveLanguageMock.mock.calls).toEqual([['en'], ['it']]);
+    expect(saveThemeMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps the language passed to setLanguage when it is already the current one', async () => {
     getSavedLanguageMock.mockResolvedValue('en');
     await renderBootstrap();
 
-    await toggleLanguage();
+    await chooseLanguage('en');
 
-    expect(shownPreferences()).toHaveTextContent('dark it it-IT Impostazioni');
-    expect(saveLanguageMock.mock.calls).toEqual([['it']]);
-
-    await act(async () => save.resolve());
-    await toggleLanguage();
-
-    expect(shownPreferences()).toHaveTextContent('dark en en-US Settings');
-    expect(saveLanguageMock.mock.calls).toEqual([['it'], ['en']]);
-    expect(saveThemeMock).not.toHaveBeenCalled();
+    expectShown('system', 'light', 'en');
   });
 
   it('keeps the new language when it cannot be saved', async () => {
     saveLanguageMock.mockRejectedValue(new Error('storage write failed'));
     await renderBootstrap();
 
-    await toggleLanguage();
+    await chooseLanguage('en');
     await letRejectionsSurface();
 
-    expect(shownPreferences()).toHaveTextContent('dark en en-US Settings');
-    expect(saveLanguageMock).toHaveBeenCalledWith('en');
+    expectShown('system', 'light', 'en');
+    expect(saveLanguageMock.mock.calls).toEqual([['en']]);
   });
 
   it.each(['ios', 'android'] as const)(
-    'applies the saved theme and every change to the system elements on %s',
+    'applies the saved preference and every change to the system elements on %s, unspecified to follow the device',
     async (os) => {
       jest.replaceProperty(Platform, 'OS', os);
       getSavedThemeMock.mockResolvedValue('light');
@@ -338,22 +468,68 @@ describe('AppBootstrap', () => {
 
       expect(setColorScheme.mock.calls).toEqual([['light']]);
 
-      await toggleTheme();
-      await toggleTheme();
-      await toggleLanguage();
+      await choosePreference('dark');
+      await choosePreference('system');
+      await changeDeviceTheme('dark');
+      await choosePreference('light');
+      await chooseLanguage('en');
 
-      expect(setColorScheme.mock.calls).toEqual([['light'], ['dark'], ['light']]);
+      expect(setColorScheme.mock.calls).toEqual([['light'], ['dark'], ['unspecified'], ['light']]);
     }
   );
 
-  it('leaves the system elements alone on web', async () => {
+  it.each(['ios', 'android'] as const)(
+    'lets the system elements follow the device on %s when nothing is saved',
+    async (os) => {
+      jest.replaceProperty(Platform, 'OS', os);
+
+      await renderBootstrap();
+      await changeDeviceTheme('dark');
+
+      expect(setColorScheme.mock.calls).toEqual([['unspecified']]);
+      expectShown('system', 'dark', 'it');
+    }
+  );
+
+  it.each([
+    { preference: 'dark', device: 'light' },
+    { preference: 'light', device: 'dark' },
+  ] as const)(
+    'shows the $device device theme again when system replaces the $preference preference, once the native module reports it',
+    async ({ preference, device: deviceTheme }) => {
+      // As on iOS: after the call, an event reports the overridden theme, or the device theme
+      // once the override is removed; until then the module reports the previous one.
+      device.setColorScheme = (style) => {
+        const reported = style === 'light' || style === 'dark' ? style : deviceTheme;
+        setTimeout(() => setDeviceTheme(reported), 0);
+      };
+      setColorScheme.mockRestore();
+      jest.replaceProperty(Platform, 'OS', 'ios');
+      setDeviceTheme(deviceTheme);
+      getSavedThemeMock.mockResolvedValue(preference);
+
+      await renderBootstrap();
+      await letNativeEventsArrive();
+
+      expectShown(preference, preference, 'it');
+
+      await choosePreference('system');
+      await letNativeEventsArrive();
+
+      expectShown('system', deviceTheme, 'it');
+    }
+  );
+
+  it('leaves the system elements alone on web, whatever the preference', async () => {
     jest.replaceProperty(Platform, 'OS', 'web');
     getSavedThemeMock.mockResolvedValue('light');
 
     await renderBootstrap();
-    await toggleTheme();
+    await choosePreference('dark');
+    await choosePreference('system');
+    await changeDeviceTheme('dark');
 
-    expect(shownPreferences()).toHaveTextContent('dark it it-IT Impostazioni');
+    expectShown('system', 'dark', 'it');
     expect(setColorScheme).not.toHaveBeenCalled();
   });
 });

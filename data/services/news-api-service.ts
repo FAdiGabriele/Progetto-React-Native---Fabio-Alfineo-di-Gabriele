@@ -4,14 +4,30 @@ import {
   NEWS_API_BASE_URL,
   NEWS_API_KEY,
   REQUEST_TIMEOUT_MS,
-  USE_NEWS_FIXTURES,
 } from '@/constants/config';
 import type {
   NewsApiPageDto,
   NewsApiRequestDto,
   NewsApiResponseDto,
 } from '@/data/services/news-api-dto';
-import { getFixturePage } from '@/data/services/news-fixture-service';
+
+type FixtureService = typeof import('@/data/services/news-fixture-service');
+
+/**
+ * The fixture service in fixture mode, `undefined` otherwise. The variable is read here, not in
+ * `constants/config`, and the service is required behind it instead of imported: a production
+ * build inlines the variable and drops the branch never taken, so without fixture mode the
+ * fixtures stay out of the bundle.
+ */
+function requireFixtureService(): FixtureService | undefined {
+  if (process.env.EXPO_PUBLIC_NEWS_USE_FIXTURES === 'true') {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require('@/data/services/news-fixture-service');
+  }
+  return undefined;
+}
+
+const fixtureService = requireFixtureService();
 
 export type NewsApiServiceErrorReason =
   | 'missingKey'
@@ -139,11 +155,15 @@ async function sendWithRetry(url: string, signal?: AbortSignal): Promise<RawResp
   }
 }
 
-function getFixtureArticles(request: NewsApiRequestDto, signal?: AbortSignal): NewsApiPageDto {
+function getFixtureArticles(
+  service: FixtureService,
+  request: NewsApiRequestDto,
+  signal?: AbortSignal
+): NewsApiPageDto {
   if (signal?.aborted) {
     throw createAbortError();
   }
-  const page = getFixturePage(request);
+  const page = service.getFixturePage(request);
   if (page === undefined) {
     throw new NewsApiServiceError('invalidResponse', { message: 'No fixture for the request' });
   }
@@ -200,8 +220,8 @@ export async function getArticles(
   request: NewsApiRequestDto,
   signal?: AbortSignal
 ): Promise<NewsApiPageDto> {
-  if (USE_NEWS_FIXTURES) {
-    return getFixtureArticles(request, signal);
+  if (fixtureService !== undefined) {
+    return getFixtureArticles(fixtureService, request, signal);
   }
   if (!IS_NEWS_API_KEY_CONFIGURED) {
     throw new NewsApiServiceError('missingKey');
