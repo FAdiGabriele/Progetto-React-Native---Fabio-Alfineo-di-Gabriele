@@ -67,6 +67,8 @@ Set `EXPO_PUBLIC_NEWS_USE_FIXTURES=true` in `.env`, or in the shell before `npx 
 
 Use it for day-to-day development: on the free plan every reload of the page, every Fast Refresh and every category switch costs requests. The fixtures hold one page per request: in fixture mode the first arrival at the end of the list adds the articles of the more-news fixture of the category (9 new cards in "Italia", 20 in "USA") and the next ones add nothing. A request with no fixture, such as one of a new category, ends with "An unexpected error occurred.". Leave the variable empty when checking the app against the real API.
 
+The fixtures reach the app bundle only in fixture mode: the news service reads the variable itself and loads the fixtures with a `require` behind it, so a production build (`npx expo export`, or a store build) made with the variable empty leaves them out. In development, with `npx expo start`, they are always in the bundle. Metro caches the transformed files without the values of the `EXPO_PUBLIC_*` variables: after changing the variable, or the key, run the export with `--clear`. The tests start with fixture mode off, whatever the shell sets.
+
 ## Checks
 
 ```bash

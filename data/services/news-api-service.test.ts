@@ -9,7 +9,6 @@ jest.mock('@/constants/config', () => ({
   ...jest.requireActual('@/constants/config'),
   NEWS_API_KEY: 'test-key',
   IS_NEWS_API_KEY_CONFIGURED: true,
-  USE_NEWS_FIXTURES: false,
 }));
 
 type FakeResponse = { status: number; ok: boolean; text: () => Promise<string> };
@@ -20,6 +19,10 @@ type FetchInit = { method: string; headers: Record<string, string>; signal: Abor
 type FetchOutcome = FakeResponse | Error | 'pending';
 
 type NewsApiService = typeof import('@/data/services/news-api-service');
+
+type FixtureService = typeof import('@/data/services/news-fixture-service');
+
+type ServiceConfig = { NEWS_API_KEY: string; IS_NEWS_API_KEY_CONFIGURED: boolean };
 
 const ITALY_FRONT_PAGES: NewsApiRequestDto = {
   endpoint: 'top-headlines',
@@ -92,10 +95,14 @@ const USA_MORE_NEWS_URL =
 
 const EMPTY_PAGE_BODY = { status: 'ok', totalResults: 0, articles: [] };
 
+const WITH_KEY: ServiceConfig = { NEWS_API_KEY: 'test-key', IS_NEWS_API_KEY_CONFIGURED: true };
+const WITHOUT_KEY: ServiceConfig = { NEWS_API_KEY: '', IS_NEWS_API_KEY_CONFIGURED: false };
+
 const fetchMock = jest.fn<Promise<FakeResponse>, [string, FetchInit]>();
 // The errors the fake fetch rejected with because its signal was aborted, in order.
 const abortErrors: Error[] = [];
 const originalFetch = globalThis.fetch;
+const originalUseFixtures = process.env.EXPO_PUBLIC_NEWS_USE_FIXTURES;
 
 beforeEach(() => {
   fetchMock.mockReset();
@@ -105,8 +112,17 @@ beforeEach(() => {
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  setUseFixtures(originalUseFixtures);
   jest.restoreAllMocks();
 });
+
+function setUseFixtures(value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env.EXPO_PUBLIC_NEWS_USE_FIXTURES;
+  } else {
+    process.env.EXPO_PUBLIC_NEWS_USE_FIXTURES = value;
+  }
+}
 
 function textResponse(body: string, status = 200): FakeResponse {
   return { status, ok: status >= 200 && status < 300, text: async () => body };
@@ -167,16 +183,23 @@ async function serviceErrorOf(promise: Promise<unknown>): Promise<NewsApiService
   return error as NewsApiServiceError;
 }
 
-// A new instance of the service, loaded with other values of the configuration; the modules
-// imported above keep the values of the mock at the top.
-function loadServiceWith(values: {
-  NEWS_API_KEY: string;
-  IS_NEWS_API_KEY_CONFIGURED: boolean;
-  USE_NEWS_FIXTURES: boolean;
-}): NewsApiService {
+// A new instance of the service, loaded with other values of the configuration and with the
+// fixture mode variable set to `useFixtures`, or unset; the modules imported above keep the
+// values of the mock at the top. `loadFixtureService` is called each time the fixture service
+// is loaded, and returns the real one.
+function loadServiceWith(
+  values: ServiceConfig,
+  useFixtures?: string
+): { service: NewsApiService; loadFixtureService: jest.Mock<FixtureService, []> } {
   jest.resetModules();
   jest.doMock('@/constants/config', () => ({ ...jest.requireActual('@/constants/config'), ...values }));
-  return jest.requireActual<NewsApiService>('@/data/services/news-api-service');
+  const loadFixtureService = jest.fn(() =>
+    jest.requireActual<FixtureService>('@/data/services/news-fixture-service')
+  );
+  jest.doMock('@/data/services/news-fixture-service', loadFixtureService);
+  setUseFixtures(useFixtures);
+  const service = jest.requireActual<NewsApiService>('@/data/services/news-api-service');
+  return { service, loadFixtureService };
 }
 
 describe('getArticles request', () => {
@@ -644,11 +667,7 @@ describe('getArticles cancellation', () => {
 
 describe('getArticles without an API key', () => {
   it('rejects with reason missingKey without calling fetch', async () => {
-    const service = loadServiceWith({
-      NEWS_API_KEY: '',
-      IS_NEWS_API_KEY_CONFIGURED: false,
-      USE_NEWS_FIXTURES: false,
-    });
+    const { service } = loadServiceWith(WITHOUT_KEY);
     mockFetch(jsonResponse(topHeadlinesUs));
 
     const error = await rejectionOf(service.getArticles(USA_TOP_HEADLINES));
@@ -660,10 +679,8 @@ describe('getArticles without an API key', () => {
 });
 
 describe('getArticles in fixture mode', () => {
-  const FIXTURE_MODE = { NEWS_API_KEY: '', IS_NEWS_API_KEY_CONFIGURED: false, USE_NEWS_FIXTURES: true };
-
   it('answers the section requests with their fixture pages, without a key and without calling fetch', async () => {
-    const service = loadServiceWith(FIXTURE_MODE);
+    const { service } = loadServiceWith(WITHOUT_KEY, 'true');
 
     const usa = await service.getArticles(USA_TOP_HEADLINES);
     const ansa = await service.getArticles(ITALY_LATEST_ANSA);
@@ -676,7 +693,7 @@ describe('getArticles in fixture mode', () => {
   });
 
   it('rejects a request without a fixture with reason invalidResponse', async () => {
-    const service = loadServiceWith(FIXTURE_MODE);
+    const { service } = loadServiceWith(WITHOUT_KEY, 'true');
 
     const error = await rejectionOf(service.getArticles({ endpoint: 'top-headlines', country: 'fr', pageSize: 50 }));
 
@@ -686,7 +703,7 @@ describe('getArticles in fixture mode', () => {
   });
 
   it('rejects with an AbortError, without calling fetch, when the signal is already aborted', async () => {
-    const service = loadServiceWith(FIXTURE_MODE);
+    const { service } = loadServiceWith(WITHOUT_KEY, 'true');
     const controller = new AbortController();
     controller.abort();
 
@@ -696,5 +713,56 @@ describe('getArticles in fixture mode', () => {
     expect(error).toHaveProperty('name', 'AbortError');
     expect(error).not.toBeInstanceOf(service.NewsApiServiceError);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('getArticles and the fixture mode variable', () => {
+  const NOT_FIXTURE_MODE = [
+    { name: 'unset', value: undefined },
+    { name: 'empty', value: '' },
+    { name: '"false"', value: 'false' },
+    { name: '"TRUE"', value: 'TRUE' },
+    { name: '"1"', value: '1' },
+  ];
+
+  it('loads the fixture service once, with the service, and answers from it without calling fetch when it is "true"', async () => {
+    const { service, loadFixtureService } = loadServiceWith(WITHOUT_KEY, 'true');
+
+    expect(loadFixtureService).toHaveBeenCalledTimes(1);
+
+    const usa = await service.getArticles(USA_TOP_HEADLINES);
+    const italy = await service.getArticles(ITALY_FRONT_PAGES);
+
+    expect(usa).toEqual({ totalResults: topHeadlinesUs.totalResults, articles: topHeadlinesUs.articles });
+    expect(italy).toEqual({ totalResults: topHeadlinesItaly.totalResults, articles: topHeadlinesItaly.articles });
+    expect(loadFixtureService).toHaveBeenCalledTimes(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each(NOT_FIXTURE_MODE)('never loads the fixture service and sends the request with fetch when it is $name', async ({ value }) => {
+    const { service, loadFixtureService } = loadServiceWith(WITH_KEY, value);
+    mockFetch(jsonResponse(EMPTY_PAGE_BODY));
+
+    await expect(service.getArticles(USA_TOP_HEADLINES)).resolves.toStrictEqual({ totalResults: 0, articles: [] });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchCall(0).url).toBe(USA_TOP_HEADLINES_URL);
+    expect(loadFixtureService).not.toHaveBeenCalled();
+  });
+
+  it.each(NOT_FIXTURE_MODE)('never loads the fixture service and rejects with reason missingKey without a key when it is $name', async ({ value }) => {
+    const { service, loadFixtureService } = loadServiceWith(WITHOUT_KEY, value);
+    mockFetch(jsonResponse(topHeadlinesUs));
+
+    const error = await rejectionOf(service.getArticles(USA_TOP_HEADLINES));
+
+    expect(error).toBeInstanceOf(service.NewsApiServiceError);
+    expect(error).toMatchObject({ reason: 'missingKey' });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(loadFixtureService).not.toHaveBeenCalled();
+  });
+
+  it('keeps the variable of a test out of the next one', () => {
+    expect(process.env.EXPO_PUBLIC_NEWS_USE_FIXTURES).toBe(originalUseFixtures);
   });
 });
