@@ -70,7 +70,7 @@ Use it for day-to-day development: on the free plan every reload of the page, ev
 ```bash
 npm run lint       # ESLint, including the rules on the direction of imports between layers
 npx tsc --noEmit   # TypeScript type check
-npm test           # Unit tests of the pure functions (Jest with the jest-expo preset)
+npm test           # Jest (jest-expo preset, React Native Testing Library): pure functions, services and repositories with fetch and storage doubles, the news reducer and ViewModel, UI components and the news screen
 ```
 
 ## Limits of the NewsAPI free plan
@@ -89,7 +89,7 @@ npm test           # Unit tests of the pure functions (Jest with the jest-expo p
 
 ## Project structure
 
-The code follows a layered architecture (service, repository, ViewModel, screen, UI components), and ESLint checks the direction of the imports between the layers.
+The code follows a layered architecture (service, repository, ViewModel, screen, UI components), and ESLint checks the direction of the imports between the layers. The ViewModel of a screen prepares everything the screen renders (translated headings and labels, formatted dates, the props of the cards and the non-blocking notice), so the screen only picks the component for the current status and passes the props down. Test files (`*.test.ts`, `*.test.tsx`) sit next to the modules they test.
 
 ```
 app/            Expo Router routes: root layout, the "/" route (news screen) and the "/settings" route (settings screen), each showing only its screen

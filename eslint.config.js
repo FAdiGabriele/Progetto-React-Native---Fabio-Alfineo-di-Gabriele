@@ -94,20 +94,8 @@ module.exports = defineConfig([
   restrictImports(
     ['screens/**/use-*-view-model.ts'],
     forbid(
-      'View models may import only repositories, models, constants/news-sections, React and platform libraries.',
-      [
-        APP,
-        SERVICES,
-        SCREENS,
-        SCREENS_RELATIVE,
-        COMPONENTS,
-        I18N,
-        THEME_PREFERENCE,
-        HOOKS,
-        UTILS,
-        THEME,
-        CONFIG,
-      ]
+      'View models may import only repositories, models, constants/news-sections, i18n, utils, React and platform libraries.',
+      [APP, SERVICES, SCREENS, SCREENS_RELATIVE, COMPONENTS, THEME_PREFERENCE, HOOKS, THEME, CONFIG]
     )
   ),
   restrictImports(
@@ -120,14 +108,14 @@ module.exports = defineConfig([
   restrictImports(
     ['i18n/**'],
     forbid(
-      'i18n follows the view model rules: besides its own files it may import only repositories, models, constants/news-sections, React and platform libraries.',
+      'i18n may import only its own files, repositories, models, constants/news-sections, React and platform libraries.',
       [APP, SERVICES, SCREENS, COMPONENTS, THEME_PREFERENCE, HOOKS, UTILS, THEME, CONFIG]
     )
   ),
   restrictImports(
     ['theme/**'],
     forbid(
-      'theme follows the view model rules: besides its own files it may import only repositories, models, constants/news-sections, React, platform libraries and the color scheme context of hooks/use-color-scheme.',
+      'theme may import only its own files, repositories, models, constants/news-sections, React, platform libraries and the color scheme context of hooks/use-color-scheme.',
       [APP, SERVICES, SCREENS, COMPONENTS, I18N, HOOKS_EXCEPT_COLOR_SCHEME, UTILS, THEME, CONFIG]
     )
   ),
