@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import type { NewsCacheEntryDto } from '@/services/news-api-dto';
+import type { NewsCacheEntryDto } from '@/data/services/news-api-dto';
 
 const STORAGE_KEY_PREFIX = 'news-app.news-cache.';
 
@@ -9,7 +9,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isCacheEntry(value: unknown): value is NewsCacheEntryDto {
-  return isRecord(value) && typeof value.savedAt === 'string' && Array.isArray(value.articles);
+  return (
+    isRecord(value) &&
+    typeof value.savedAt === 'string' &&
+    Array.isArray(value.requests) &&
+    value.requests.every((articles) => Array.isArray(articles))
+  );
 }
 
 /**

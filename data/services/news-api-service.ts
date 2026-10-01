@@ -1,5 +1,6 @@
 import {
   IS_NEWS_API_KEY_CONFIGURED,
+  NETWORK_RETRY_DELAY_MS,
   NEWS_API_BASE_URL,
   NEWS_API_KEY,
   REQUEST_TIMEOUT_MS,
@@ -9,8 +10,8 @@ import type {
   NewsApiPageDto,
   NewsApiRequestDto,
   NewsApiResponseDto,
-} from '@/services/news-api-dto';
-import { getFixturePage } from '@/services/news-fixture-service';
+} from '@/data/services/news-api-dto';
+import { getFixturePage } from '@/data/services/news-fixture-service';
 
 export type NewsApiServiceErrorReason =
   | 'missingKey'
@@ -103,22 +104,39 @@ async function send(url: string, signal?: AbortSignal): Promise<RawResponse> {
   }
 }
 
+// The error fetch rejects with when its signal is aborted.
+function createAbortError(): Error {
+  const error = new Error('The operation was aborted.');
+  error.name = 'AbortError';
+  return error;
+}
+
+// Resolves after the retry pause, or rejects like fetch as soon as the caller aborts `signal`.
+function waitBeforeRetry(signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timeoutId);
+      signal?.removeEventListener('abort', onAbort);
+      reject(createAbortError());
+    };
+    const timeoutId = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, NETWORK_RETRY_DELAY_MS);
+    signal?.addEventListener('abort', onAbort);
+  });
+}
+
 async function sendWithRetry(url: string, signal?: AbortSignal): Promise<RawResponse> {
   try {
     return await send(url, signal);
   } catch (error) {
     if (error instanceof NewsApiServiceError && error.reason === 'network' && !signal?.aborted) {
+      await waitBeforeRetry(signal);
       return send(url, signal);
     }
     throw error;
   }
-}
-
-// The error fetch rejects with when its signal is already aborted.
-function createAbortError(): Error {
-  const error = new Error('The operation was aborted.');
-  error.name = 'AbortError';
-  return error;
 }
 
 function getFixtureArticles(request: NewsApiRequestDto, signal?: AbortSignal): NewsApiPageDto {
@@ -173,9 +191,10 @@ function parseResponse({ status, ok, body }: RawResponse): NewsApiPageDto {
 
 /**
  * Fetches one page of a NewsAPI request: its articles and the total number of results.
- * Rejects with a NewsApiServiceError, or with the fetch abort error unchanged when the
- * caller aborts `signal`. In fixture mode the page comes from `services/fixtures/`,
- * without any request and without checking the key.
+ * A request that fails on the network is sent once more, after a pause. Rejects with a
+ * NewsApiServiceError, or with an abort error when the caller aborts `signal`: the one of
+ * fetch, unchanged, or one like it during the pause before the retry. In fixture mode the
+ * page comes from `data/services/fixtures/`, without any request and without checking the key.
  */
 export async function getArticles(
   request: NewsApiRequestDto,

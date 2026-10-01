@@ -1,9 +1,11 @@
-import { useMemo, type ReactElement } from 'react';
+import { useCallback, useMemo, type ReactElement } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
-  type ListRenderItemInfo,
+  Platform,
   RefreshControl,
+  SectionList,
+  type SectionListData,
+  type SectionListRenderItemInfo,
   StyleSheet,
   View,
 } from 'react-native';
@@ -11,13 +13,18 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { NewsCard, type NewsCardProps } from '@/components/news/news-card';
+import { ThemedText } from '@/components/themed-text';
+import { TextButton } from '@/components/ui/text-button';
 import { Layout } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
 
 export type NewsListItem = NewsCardProps & { id: string };
 
+/** Cards shown under one heading. */
+export type NewsListGroup = { key: string; title: string; items: NewsListItem[] };
+
 export type NewsListProps = {
-  items: NewsListItem[];
+  groups: NewsListGroup[];
   columns: number;
   horizontalMargin: number;
   refreshing: boolean;
@@ -26,23 +33,44 @@ export type NewsListProps = {
   loadingMore: boolean;
   /** Called when the scroll reaches the end of the list; absent when there is nothing more to load. */
   onEndReached?: () => void;
+  /** Label of the button shown below the last card, in place of the indicator, when a later page failed. */
+  retryLabel: string;
+  /** Loads again the later page that failed; absent when none did, and the button with it. */
+  onRetry?: () => void;
   emptyComponent: ReactElement;
 };
 
-// A cell without an item fills an incomplete last grid row, so every card keeps the column width.
-type NewsListCell = { id: string; item?: NewsListItem };
+// A row of the list: up to `columns` cards of one group, fewer in the last row of the group.
+type NewsListRow = { key: string; items: NewsListItem[] };
 
-function toCells(items: NewsListItem[], columns: number): NewsListCell[] {
-  const cells: NewsListCell[] = items.map((item) => ({ id: item.id, item }));
-  const fillerCount = (columns - (items.length % columns)) % columns;
-  for (let index = 0; index < fillerCount; index += 1) {
-    cells.push({ id: `filler-${index}` });
-  }
-  return cells;
+// A section of the list is a group: its heading, then its rows.
+type NewsListSection = { key: string; title: string; first: boolean };
+
+type NewsListSectionData = SectionListData<NewsListRow, NewsListSection>;
+
+// The section key is the group key, so that it survives a page that adds a group before it;
+// a repeated group key gets a counter.
+function toSections(groups: NewsListGroup[], columns: number): NewsListSectionData[] {
+  const occurrences = new Map<string, number>();
+  return groups.map((group, index) => {
+    const occurrence = (occurrences.get(group.key) ?? 0) + 1;
+    occurrences.set(group.key, occurrence);
+    const data: NewsListRow[] = [];
+    for (let start = 0; start < group.items.length; start += columns) {
+      const items = group.items.slice(start, start + columns);
+      data.push({ key: items[0].id, items });
+    }
+    return {
+      key: occurrence === 1 ? group.key : `${group.key}-${occurrence}`,
+      title: group.title,
+      first: index === 0,
+      data,
+    };
+  });
 }
 
-function keyExtractor(cell: NewsListCell) {
-  return cell.id;
+function keyExtractor(row: NewsListRow) {
+  return row.key;
 }
 
 function renderCard(item: NewsListItem) {
@@ -50,61 +78,101 @@ function renderCard(item: NewsListItem) {
   return <NewsCard {...card} />;
 }
 
-function renderRow({ item: cell }: ListRenderItemInfo<NewsListCell>) {
-  return cell.item === undefined ? null : renderCard(cell.item);
+// Empty cells fill an incomplete row, so every card keeps the column width.
+function GridCells({ row, columns }: { row: NewsListRow; columns: number }) {
+  const fillers = Array.from({ length: columns - row.items.length }, (_, index) => `filler-${index}`);
+  return (
+    <>
+      {row.items.map((item) => (
+        <View key={item.id} style={styles.gridCell}>
+          {renderCard(item)}
+        </View>
+      ))}
+      {fillers.map((key) => (
+        <View key={key} style={styles.gridCell} />
+      ))}
+    </>
+  );
 }
 
-function renderGridCell({ item: cell }: ListRenderItemInfo<NewsListCell>) {
-  return <View style={styles.gridCell}>{cell.item === undefined ? null : renderCard(cell.item)}</View>;
+function renderSectionHeader({ section }: { section: NewsListSectionData }) {
+  return (
+    <ThemedText
+      accessibilityRole="header"
+      aria-level={2}
+      style={[styles.heading, !section.first && styles.headingSpaced]}
+    >
+      {section.title}
+    </ThemedText>
+  );
 }
 
-function RowSeparator() {
-  return <View style={styles.rowSeparator} />;
-}
-
-function GridRowSeparator() {
-  return <View style={styles.gridRowSeparator} />;
-}
+type ListFooterProps = { loading: boolean; color: string; retryLabel: string; onRetry?: () => void };
 
 // The footer keeps a fixed height while more pages exist, so that a page starting or failing
-// does not change the content length: the FlatList would otherwise call onEndReached again by itself.
-function ListFooter({ loading, color }: { loading: boolean; color: string }) {
+// does not change the content length: the list would otherwise call onEndReached again by itself.
+function ListFooter({ loading, color, retryLabel, onRetry }: ListFooterProps) {
   return (
     <View style={styles.footer}>
-      {loading && <ActivityIndicator size="small" color={color} />}
+      {loading ? (
+        <ActivityIndicator size="small" color={color} />
+      ) : (
+        onRetry !== undefined && (
+          <TextButton title={retryLabel} accessibilityLabel={retryLabel} onPress={onRetry} />
+        )
+      )}
     </View>
   );
 }
 
 export function NewsList({
-  items,
+  groups,
   columns,
   horizontalMargin,
   refreshing,
   onRefresh,
   loadingMore,
   onEndReached,
+  retryLabel,
+  onRetry,
   emptyComponent,
 }: NewsListProps) {
   const insets = useSafeAreaInsets();
   const tint = useThemeColor({}, 'tint');
   const card = useThemeColor({}, 'card');
   const isGrid = columns > 1;
-  const cells = useMemo(() => toCells(items, columns), [items, columns]);
+  const sections = useMemo(() => toSections(groups, columns), [groups, columns]);
+  // The space between the rows of a group belongs to the rows, not to a separator component:
+  // on web a separator wraps the row in a view only once it exists, remounting the last row
+  // of a group when a later page extends it.
+  const renderRow = useCallback(
+    ({ item: row, index }: SectionListRenderItemInfo<NewsListRow, NewsListSection>) => (
+      <View
+        style={[
+          isGrid && styles.gridRow,
+          index > 0 && (isGrid ? styles.gridRowSpaced : styles.rowSpaced),
+        ]}
+      >
+        {isGrid ? <GridCells row={row} columns={columns} /> : renderCard(row.items[0])}
+      </View>
+    ),
+    [columns, isGrid]
+  );
 
   return (
-    <FlatList<NewsListCell>
+    <SectionList<NewsListRow, NewsListSection>
       key={`columns-${columns}`}
-      data={cells}
-      numColumns={columns}
-      columnWrapperStyle={isGrid ? styles.gridRow : undefined}
+      sections={sections}
       keyExtractor={keyExtractor}
-      renderItem={isGrid ? renderGridCell : renderRow}
-      ItemSeparatorComponent={isGrid ? GridRowSeparator : RowSeparator}
+      renderItem={renderRow}
+      renderSectionHeader={renderSectionHeader}
+      stickySectionHeadersEnabled={false}
+      // The same default as the FlatList, which clips the rows outside the screen on Android.
+      removeClippedSubviews={Platform.OS === 'android'}
       ListEmptyComponent={emptyComponent}
       ListFooterComponent={
-        loadingMore || onEndReached !== undefined ? (
-          <ListFooter loading={loadingMore} color={tint} />
+        loadingMore || onEndReached !== undefined || onRetry !== undefined ? (
+          <ListFooter loading={loadingMore} color={tint} retryLabel={retryLabel} onRetry={onRetry} />
         ) : null
       }
       onEndReached={onEndReached}
@@ -140,20 +208,30 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingTop: 4,
   },
+  heading: {
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: '700',
+    paddingBottom: 8,
+  },
+  headingSpaced: {
+    paddingTop: 24,
+  },
+  rowSpaced: {
+    marginTop: Layout.cardGap.mobile,
+  },
   gridRow: {
+    flexDirection: 'row',
     gap: Layout.cardGap.desktop,
+  },
+  gridRowSpaced: {
+    marginTop: Layout.cardGap.desktop,
   },
   gridCell: {
     flex: 1,
   },
-  rowSeparator: {
-    height: Layout.cardGap.mobile,
-  },
-  gridRowSeparator: {
-    height: Layout.cardGap.desktop,
-  },
   footer: {
-    height: 44, // 12 points above and below the 20-point indicator
+    height: 44, // 12 points above and below the 20-point indicator, and the height of the button
     alignItems: 'center',
     justifyContent: 'center',
   },
