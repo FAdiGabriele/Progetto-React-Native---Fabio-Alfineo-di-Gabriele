@@ -48,6 +48,8 @@ export type NewsErrorKind =
   | 'timeout'
   | 'auth'
   | 'rateLimit'
+  | 'quotaExhausted'
+  | 'resultsLimit'
   | 'badRequest'
   | 'server'
   | 'unknown';

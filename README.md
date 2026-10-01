@@ -16,7 +16,8 @@ A React Native app, built with [Expo](https://expo.dev), that shows the main new
 - **Italian and English interface**, chosen from the "Language" row of the settings, opened with the gear at the top right of the header: the row reads "Italiano" with the Italian interface and "English" with the English one, and a tap switches to the other language. The choice is remembered across restarts and dates follow the language.
 - **Light and dark theme**: the app starts in the dark theme, whatever the system setting, and the "Theme" row of the settings switches to the light one; the choice is remembered across restarts. Screen reader labels on cards, chips, buttons, the settings gear ("Impostazioni" / "Settings") and the settings rows, read with their current value ("Tema: Scuro" / "Theme: Dark", "Lingua: Italiano" / "Language: English"); the group headings of the list are announced as headings.
 - **App name and icon in the browser tab** on web: the tab always shows "News App" and the newspaper icon of the app, whatever the language, the category and the screen.
-- Loading, error and empty states, the last two with a "Retry" button ("Riprova"); a 10-second timeout on every request; requests cancelled when a new load starts.
+- **Start-up**: the saved theme and the saved language are read together while the splash screen stays visible, so the first screen already appears with both.
+- Loading, error and empty states, the last two with a "Retry" button ("Riprova"); a 10-second timeout on every request and, after a network failure, a single retry one second later; requests cancelled when a new load starts. The error message follows the answer of NewsAPI: its error code when it says more than the HTTP status (too many requests, daily quota used up, results limit reached), and "service unavailable" for every 5xx status.
 
 ### Known limits of the sources
 
@@ -48,7 +49,7 @@ The key is sent in the `X-Api-Key` header, never in the URL. Note that `EXPO_PUB
 
 Restart the development server after every change to `.env`.
 
-If the app shows "Missing or invalid API key. Check the .env file." ("Chiave API mancante o non valida. Controlla il file .env."), check `EXPO_PUBLIC_NEWS_API_KEY` in `.env` and restart the server. "Request limit reached. Try again later." means the daily quota of the key is used up: switch to fixture mode (see below). The app never retries these errors automatically.
+If the app shows "Missing or invalid API key. Check the .env file." ("Chiave API mancante o non valida. Controlla il file .env."), check `EXPO_PUBLIC_NEWS_API_KEY` in `.env` and restart the server. "Too many requests in a short time. Try again later." and "Daily request limit reached. Try again tomorrow." mean that the key has hit a limit of NewsAPI, the rate limit or the daily quota: switch to fixture mode (see below). The app never retries these errors automatically.
 
 ## Run
 
@@ -70,12 +71,12 @@ Use it for day-to-day development: on the free plan every reload of the page, ev
 ```bash
 npm run lint       # ESLint, including the rules on the direction of imports between layers
 npx tsc --noEmit   # TypeScript type check
-npm test           # Jest (jest-expo preset, React Native Testing Library): pure functions, services and repositories with fetch and storage doubles, the news reducer and ViewModel, UI components and the news screen
+npm test           # Jest (jest-expo preset, React Native Testing Library): pure functions, services and repositories with fetch and storage doubles, the news reducer and ViewModel, UI components, the news screen and the app start-up
 ```
 
 ## Limits of the NewsAPI free plan
 
-- **100 requests per day per key**, shared by web, Android and iOS. Every start, refresh, "Retry" and category switch loads the first page of the selected category: two requests for "Italia" (headlines plus ANSA), one for "USA". Every page loaded at the end of the list costs one request, in both categories, and a category asks at most five pages; a page that brings nothing new is followed at once by the next one, within the same five, and every retry of a failed page costs one request. Opening the settings, switching language or theme and showing the saved list cost no requests. The app never polls and retries a request at most once, only for network errors.
+- **100 requests per day per key**, shared by web, Android and iOS. Every start, refresh, "Retry" and category switch loads the first page of the selected category: two requests for "Italia" (headlines plus ANSA), one for "USA". Every page loaded at the end of the list costs one request, in both categories, and a category asks at most five pages; a page that brings nothing new is followed at once by the next one, within the same five, and every retry of a failed page costs one request. Opening the settings, switching language or theme and showing the saved list cost no requests. The app never polls and retries a request at most once, only for network errors and after a one-second pause.
 - **24-hour delay** on the articles of every category: the "news of the moment" is about one day old, which is why each card shows the publication date.
 - **CORS enabled only for `localhost`**: the web version works only in the browser of the machine that runs `npx expo start`, opened at `localhost`. From another device on the local network, or once published, the requests fail with the "No connection" message.
 - **At most 100 results per request**, a limit reported by developers and not documented by NewsAPI (beyond it the API answers HTTP 426): the app asks for no page beyond 100 results per request.
@@ -99,9 +100,10 @@ screens/        One folder per screen, each with the screen and its ViewModel (a
 components/     UI components that receive everything through props: card, list, image, category chips, states, text button, banner, icon button (the settings gear), list row (the settings rows)
 i18n/           Italian and English dictionaries and the language provider
 theme/          The theme provider: chosen theme, switch and saving
+bootstrap/      App start-up: reads the saved theme and language together behind the splash screen, then mounts the two providers
 constants/      Configuration, news sections and theme
 hooks/          Theme hooks and the context of the active theme
 utils/          Pure functions: dates, URLs, layout
 ```
 
-Constants (base URL, 50 articles per headlines request, 20 articles per page at the end of the list, 100 results per request, 10-second timeout) live in `constants/config.ts`. The categories, with the requests of their first page and the request of their more news, live in `constants/news-sections.ts`: a new category also needs its chip label in `i18n/it.ts` and `i18n/en.ts` and, for fixture mode, a fixture for each of its requests in `services/fixtures/` mapped in `services/news-fixture-service.ts`.
+Constants (base URL, 50 articles per headlines request, 20 articles per page at the end of the list, 100 results per request, 10-second timeout, one-second pause before the retry of a network failure) live in `constants/config.ts`. The categories, with the requests of their first page and the request of their more news, live in `constants/news-sections.ts`: a new category also needs its chip label in `i18n/it.ts` and `i18n/en.ts` and, for fixture mode, a fixture for each of its requests in `services/fixtures/` mapped in `services/news-fixture-service.ts`.

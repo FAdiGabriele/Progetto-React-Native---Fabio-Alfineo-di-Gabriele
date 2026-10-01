@@ -27,7 +27,21 @@ function getSection(sectionKey: NewsSectionKey): NewsSection {
   return section;
 }
 
-function toHttpErrorKind(status: number | undefined): NewsErrorKind {
+// The NewsAPI codes that say more than the HTTP status they come with.
+function toCodeErrorKind(code: string | undefined): NewsErrorKind | undefined {
+  switch (code) {
+    case 'rateLimited':
+      return 'rateLimit';
+    case 'apiKeyExhausted':
+      return 'quotaExhausted';
+    case 'maximumResultsReached':
+      return 'resultsLimit';
+    default:
+      return undefined;
+  }
+}
+
+function toStatusErrorKind(status: number | undefined): NewsErrorKind {
   switch (status) {
     case 400:
       return 'badRequest';
@@ -35,11 +49,13 @@ function toHttpErrorKind(status: number | undefined): NewsErrorKind {
       return 'auth';
     case 429:
       return 'rateLimit';
-    case 500:
-      return 'server';
     default:
-      return 'unknown';
+      return status !== undefined && status >= 500 && status <= 599 ? 'server' : 'unknown';
   }
+}
+
+function toHttpErrorKind(error: NewsApiServiceError): NewsErrorKind {
+  return toCodeErrorKind(error.code) ?? toStatusErrorKind(error.status);
 }
 
 function toNewsErrorKind(error: NewsApiServiceError): NewsErrorKind {
@@ -51,7 +67,7 @@ function toNewsErrorKind(error: NewsApiServiceError): NewsErrorKind {
     case 'timeout':
       return 'timeout';
     case 'http':
-      return toHttpErrorKind(error.status);
+      return toHttpErrorKind(error);
     case 'invalidResponse':
       return 'unknown';
   }

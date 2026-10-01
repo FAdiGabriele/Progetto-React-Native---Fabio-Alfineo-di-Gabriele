@@ -3,7 +3,7 @@ import { openBrowserAsync, WebBrowserResultType, type WebBrowserResult } from 'e
 import { Linking } from 'react-native';
 
 import type { NewsGroupKey } from '@/constants/news-sections';
-import { NewsError, type Article, type NewsPage, type SavedNews } from '@/repositories/news-model';
+import { NewsError, type Article, type NewsErrorKind, type NewsPage, type SavedNews } from '@/repositories/news-model';
 import {
   INITIAL_NEWS_STATE,
   reduceNewsState,
@@ -561,6 +561,11 @@ function deferred<T>() {
 const FIRST_PAGE: SectionPage = { groups: [FRONT_PAGES, LATEST_ANSA], next: { page: 1 } };
 const NETWORK_MESSAGE = 'Connessione assente. Controlla la rete e riprova.';
 
+const LIMIT_ERRORS: { kind: NewsErrorKind; message: string }[] = [
+  { kind: 'quotaExhausted', message: 'Limite giornaliero di richieste raggiunto. Riprova domani.' },
+  { kind: 'resultsLimit', message: 'Raggiunto il limite di notizie disponibili per questa categoria.' },
+];
+
 // Articles of the first page again: one by URL, one by title, source and day.
 const DUPLICATES: NewsSectionGroup = {
   key: 'moreNews',
@@ -670,6 +675,37 @@ describe('useNewsViewModel', () => {
     expect(result.current.updatedAtLabel).toBeUndefined();
     expect(result.current.hasMore).toBe(false);
   });
+
+  it.each(LIMIT_ERRORS)(
+    'shows the $kind message in the error state when the first page fails and nothing is saved',
+    async ({ kind, message }) => {
+      getSectionArticles.mockRejectedValueOnce(new NewsError(kind));
+
+      const { result } = await renderHook(() => useNewsViewModel());
+      await waitFor(() => expect(result.current.status).toBe('error'));
+
+      expect(result.current.errorMessage).toBe(message);
+      expect(result.current.notice).toBeNull();
+    }
+  );
+
+  it.each(LIMIT_ERRORS)(
+    'reports a $kind error inside the partial notice of a first page and alone for a failed page of more news',
+    async ({ kind, message }) => {
+      const { result } = await renderLoaded({ groups: [FRONT_PAGES], next: { page: 1 }, partialError: new NewsError(kind) });
+
+      expect(result.current.notice).toBe(`Alcune notizie non sono state caricate. ${message}`);
+      expect(result.current.errorMessage).toBe(message);
+
+      getSectionArticles.mockRejectedValueOnce(new NewsError(kind));
+      await act(async () => result.current.loadMore());
+      await waitFor(() => expect(result.current.status).toBe('error'));
+
+      expect(result.current.notice).toBe(message);
+      expect(result.current.errorMessage).toBe(message);
+      expect(result.current.groups).toHaveLength(1);
+    }
+  );
 
   it('translates an unexpected rejection as an unknown error', async () => {
     getSectionArticles.mockRejectedValueOnce(new Error('boom'));
@@ -797,7 +833,7 @@ describe('useNewsViewModel', () => {
     await act(async () => result.current.loadMore());
     await waitFor(() => expect(result.current.status).toBe('error'));
 
-    expect(result.current.notice).toBe('Limite di richieste raggiunto. Riprova più tardi.');
+    expect(result.current.notice).toBe('Troppe richieste in poco tempo. Riprova più tardi.');
     expect(result.current.groups).toHaveLength(2);
     expect(result.current.hasMore).toBe(true);
 

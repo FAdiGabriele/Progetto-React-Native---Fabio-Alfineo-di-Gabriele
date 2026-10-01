@@ -3,7 +3,7 @@ import { Appearance, Platform } from 'react-native';
 
 import { ColorSchemeContext } from '@/hooks/use-color-scheme';
 import type { Theme } from '@/repositories/theme-model';
-import { getSavedTheme, saveTheme } from '@/repositories/theme-repository';
+import { saveTheme } from '@/repositories/theme-repository';
 
 export type ThemePreference = {
   theme: Theme;
@@ -18,59 +18,42 @@ const OTHER_THEME: Record<Theme, Theme> = { light: 'dark', dark: 'light' };
 const ThemePreferenceContext = createContext<ThemePreference | null>(null);
 
 /**
- * Provides the chosen theme to its children, which render only once the saved theme has
- * been read; without a valid saved value the theme is dark. On Android and iOS the theme
- * is also applied to the system elements, such as alerts.
+ * Provides the chosen theme to its children, starting from the saved theme read at startup;
+ * without a valid saved value the theme is dark. On Android and iOS the theme is also
+ * applied to the system elements, such as alerts.
  */
-export function ThemePreferenceProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    getSavedTheme().then(
-      (saved) => {
-        if (!cancelled) {
-          setTheme(saved ?? DEFAULT_THEME);
-        }
-      },
-      () => {
-        if (!cancelled) {
-          setTheme(DEFAULT_THEME);
-        }
-      }
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+export function ThemePreferenceProvider({
+  initialTheme,
+  children,
+}: {
+  /** Saved theme, or null when there is no valid one. */
+  initialTheme: Theme | null;
+  children: ReactNode;
+}) {
+  const [theme, setTheme] = useState<Theme>(initialTheme ?? DEFAULT_THEME);
 
   // react-native-web has no Appearance.setColorScheme: on web the context is enough.
   useEffect(() => {
-    if (theme !== null && Platform.OS !== 'web') {
+    if (Platform.OS !== 'web') {
       Appearance.setColorScheme(theme);
     }
   }, [theme]);
 
-  const value = useMemo<ThemePreference | null>(() => {
-    if (theme === null) {
-      return null;
-    }
-    return {
+  const value = useMemo<ThemePreference>(
+    () => ({
       theme,
       toggleTheme: () => {
         const next = OTHER_THEME[theme];
         setTheme(next);
         saveTheme(next).catch(() => {});
       },
-    };
-  }, [theme]);
+    }),
+    [theme]
+  );
 
-  if (value === null) {
-    return null;
-  }
   return (
     <ThemePreferenceContext.Provider value={value}>
-      <ColorSchemeContext.Provider value={value.theme}>{children}</ColorSchemeContext.Provider>
+      <ColorSchemeContext.Provider value={theme}>{children}</ColorSchemeContext.Provider>
     </ThemePreferenceContext.Provider>
   );
 }

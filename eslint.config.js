@@ -22,6 +22,7 @@ const SETTINGS_SCREEN = folder('screens/settings');
 const COMPONENTS = folder('components');
 const I18N = folder('i18n');
 const THEME_PREFERENCE = folder('theme');
+const BOOTSTRAP = folder('bootstrap');
 const HOOKS = folder('hooks');
 const HOOKS_EXCEPT_COLOR_SCHEME = String.raw`${PROJECT}hooks(?!/use-color-scheme(?:\.ts)?$)(?:/|$)`;
 const UTILS = folder('utils');
@@ -41,6 +42,7 @@ const SCREEN_FORBIDDEN = [
   APP,
   SERVICES,
   REPOSITORIES_EXCEPT_MODELS,
+  BOOTSTRAP,
   HOOKS,
   THEME,
   CONFIG,
@@ -67,6 +69,7 @@ module.exports = defineConfig([
       COMPONENTS,
       I18N,
       THEME_PREFERENCE,
+      BOOTSTRAP,
       HOOKS,
       THEME,
       NEWS_SECTIONS,
@@ -77,7 +80,7 @@ module.exports = defineConfig([
     ['repositories/**'],
     forbid(
       'Repositories may import only services, DTOs, models, other repositories, constants/config, constants/news-sections and utils.',
-      [APP, SCREENS, COMPONENTS, I18N, THEME_PREFERENCE, HOOKS, THEME]
+      [APP, SCREENS, COMPONENTS, I18N, THEME_PREFERENCE, BOOTSTRAP, HOOKS, THEME]
     ),
     NO_REACT
   ),
@@ -95,33 +98,73 @@ module.exports = defineConfig([
     ['screens/**/use-*-view-model.ts'],
     forbid(
       'View models may import only repositories, models, constants/news-sections, i18n, utils, React and platform libraries.',
-      [APP, SERVICES, SCREENS, SCREENS_RELATIVE, COMPONENTS, THEME_PREFERENCE, HOOKS, THEME, CONFIG]
+      [
+        APP,
+        SERVICES,
+        SCREENS,
+        SCREENS_RELATIVE,
+        COMPONENTS,
+        THEME_PREFERENCE,
+        BOOTSTRAP,
+        HOOKS,
+        THEME,
+        CONFIG,
+      ]
     )
   ),
   restrictImports(
     ['components/**'],
     forbid(
       'UI components may import only other components, constants/theme, hooks and UI libraries: data and texts arrive via props.',
-      [APP, SERVICES, REPOSITORIES, SCREENS, I18N, THEME_PREFERENCE, UTILS, CONFIG, NEWS_SECTIONS]
+      [
+        APP,
+        SERVICES,
+        REPOSITORIES,
+        SCREENS,
+        I18N,
+        THEME_PREFERENCE,
+        BOOTSTRAP,
+        UTILS,
+        CONFIG,
+        NEWS_SECTIONS,
+      ]
     )
   ),
   restrictImports(
     ['i18n/**'],
     forbid(
       'i18n may import only its own files, repositories, models, constants/news-sections, React and platform libraries.',
-      [APP, SERVICES, SCREENS, COMPONENTS, THEME_PREFERENCE, HOOKS, UTILS, THEME, CONFIG]
+      [APP, SERVICES, SCREENS, COMPONENTS, THEME_PREFERENCE, BOOTSTRAP, HOOKS, UTILS, THEME, CONFIG]
     )
   ),
   restrictImports(
     ['theme/**'],
     forbid(
       'theme may import only its own files, repositories, models, constants/news-sections, React, platform libraries and the color scheme context of hooks/use-color-scheme.',
-      [APP, SERVICES, SCREENS, COMPONENTS, I18N, HOOKS_EXCEPT_COLOR_SCHEME, UTILS, THEME, CONFIG]
+      [
+        APP,
+        SERVICES,
+        SCREENS,
+        COMPONENTS,
+        I18N,
+        BOOTSTRAP,
+        HOOKS_EXCEPT_COLOR_SCHEME,
+        UTILS,
+        THEME,
+        CONFIG,
+      ]
+    )
+  ),
+  restrictImports(
+    ['bootstrap/**'],
+    forbid(
+      'bootstrap may import only its own files, the i18n and theme providers, repositories, models, React and platform libraries.',
+      [APP, SERVICES, SCREENS, COMPONENTS, HOOKS, UTILS, THEME, CONFIG, NEWS_SECTIONS]
     )
   ),
   restrictImports(
     ['constants/**', 'utils/**', 'hooks/**'],
-    forbid('constants, utils and hooks must not import routes, layers, i18n or theme.', [
+    forbid('constants, utils and hooks must not import routes, layers, i18n, theme or bootstrap.', [
       APP,
       SERVICES,
       REPOSITORIES,
@@ -129,6 +172,7 @@ module.exports = defineConfig([
       COMPONENTS,
       I18N,
       THEME_PREFERENCE,
+      BOOTSTRAP,
     ])
   ),
 ]);

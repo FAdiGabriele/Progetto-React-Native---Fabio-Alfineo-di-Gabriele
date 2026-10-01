@@ -1,4 +1,4 @@
-import { REQUEST_TIMEOUT_MS } from '@/constants/config';
+import { NETWORK_RETRY_DELAY_MS, REQUEST_TIMEOUT_MS } from '@/constants/config';
 import everythingAnsa from '@/services/fixtures/everything-ansa.json';
 import topHeadlinesItaly from '@/services/fixtures/top-headlines-italy.json';
 import topHeadlinesUs from '@/services/fixtures/top-headlines-us.json';
@@ -373,26 +373,160 @@ describe('NewsApiServiceError', () => {
 });
 
 describe('getArticles retry', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('sends the retry of a network failure only after NETWORK_RETRY_DELAY_MS, to the same URL', async () => {
+    mockFetch(new TypeError('Network request failed'), jsonResponse(EMPTY_PAGE_BODY));
+    const result = getArticles(USA_TOP_HEADLINES);
+
+    await jest.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await jest.advanceTimersByTimeAsync(NETWORK_RETRY_DELAY_MS - 1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await jest.advanceTimersByTimeAsync(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([USA_TOP_HEADLINES_URL, USA_TOP_HEADLINES_URL]);
+    await expect(result).resolves.toStrictEqual({ totalResults: 0, articles: [] });
+  });
+
+  it('returns the page of the retry when the first attempt fails on the network', async () => {
+    mockFetch(new TypeError('Network request failed'), jsonResponse(topHeadlinesUs));
+    const result = getArticles(USA_TOP_HEADLINES);
+
+    await jest.advanceTimersByTimeAsync(NETWORK_RETRY_DELAY_MS);
+
+    await expect(result).resolves.toStrictEqual({ totalResults: 37, articles: topHeadlinesUs.articles });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
   it('retries a network failure once, then rejects with reason network and the second failure as cause', async () => {
     const first = new TypeError('Network request failed');
     const second = new TypeError('Network request failed again');
     mockFetch(first, second);
+    const outcome = serviceErrorOf(getArticles(USA_TOP_HEADLINES));
 
-    const error = await serviceErrorOf(getArticles(USA_TOP_HEADLINES));
+    await jest.advanceTimersByTimeAsync(NETWORK_RETRY_DELAY_MS);
+    const error = await outcome;
 
     expect(error.reason).toBe('network');
     expect(error.cause).toBe(second);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([USA_TOP_HEADLINES_URL, USA_TOP_HEADLINES_URL]);
+    expect(jest.getTimerCount()).toBe(0);
+
+    await jest.advanceTimersByTimeAsync(NETWORK_RETRY_DELAY_MS * 2);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('returns the page of the retry when the first attempt fails on the network', async () => {
-    mockFetch(new TypeError('Network request failed'), jsonResponse(topHeadlinesUs));
+  it('rejects with reason timeout when the retry times out', async () => {
+    mockFetch(new TypeError('Network request failed'), 'pending');
+    const outcome = serviceErrorOf(getArticles(USA_TOP_HEADLINES));
 
-    const page = await getArticles(USA_TOP_HEADLINES);
+    await jest.advanceTimersByTimeAsync(NETWORK_RETRY_DELAY_MS + REQUEST_TIMEOUT_MS);
+    const error = await outcome;
 
-    expect(page).toStrictEqual({ totalResults: 37, articles: topHeadlinesUs.articles });
+    expect(error.reason).toBe('timeout');
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchCall(1).init.signal.aborted).toBe(true);
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it('rejects with reason http when the retry gets an HTTP error, without a third attempt', async () => {
+    mockFetch(
+      new TypeError('Network request failed'),
+      errorResponse(429, 'rateLimited', 'Too many requests'),
+      jsonResponse(EMPTY_PAGE_BODY)
+    );
+    const outcome = serviceErrorOf(getArticles(USA_TOP_HEADLINES));
+
+    await jest.advanceTimersByTimeAsync(NETWORK_RETRY_DELAY_MS * 3);
+    const error = await outcome;
+
+    expect(error).toMatchObject({ reason: 'http', status: 429, code: 'rateLimited' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it.each([
+    { name: 'a timeout', outcome: 'pending' as const, reason: 'timeout' },
+    { name: 'an HTTP error', outcome: errorResponse(500, 'unexpectedError', 'Mock unexpectedError'), reason: 'http' },
+    { name: 'an invalid response', outcome: textResponse('', 200), reason: 'invalidResponse' },
+  ])('rejects at once after $name, without a pause and without a retry', async ({ outcome, reason }) => {
+    mockFetch(outcome, jsonResponse(EMPTY_PAGE_BODY));
+    const result = serviceErrorOf(getArticles(USA_TOP_HEADLINES));
+
+    await jest.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+
+    expect(jest.getTimerCount()).toBe(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await jest.advanceTimersByTimeAsync(NETWORK_RETRY_DELAY_MS);
+    const error = await result;
+
+    expect(error.reason).toBe(reason);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops listening to the caller signal and leaves no timer once the pause is over', async () => {
+    mockFetch(new TypeError('Network request failed'), jsonResponse(EMPTY_PAGE_BODY));
+    const controller = new AbortController();
+    const addListener = jest.spyOn(controller.signal, 'addEventListener');
+    const removeListener = jest.spyOn(controller.signal, 'removeEventListener');
+    const result = getArticles(USA_TOP_HEADLINES, controller.signal);
+
+    await jest.advanceTimersByTimeAsync(NETWORK_RETRY_DELAY_MS);
+    await expect(result).resolves.toStrictEqual({ totalResults: 0, articles: [] });
+
+    expect(addListener).toHaveBeenCalledTimes(3);
+    for (const [type, listener] of addListener.mock.calls) {
+      expect(type).toBe('abort');
+      expect(removeListener).toHaveBeenCalledWith('abort', listener);
+    }
+    expect(jest.getTimerCount()).toBe(0);
+
+    controller.abort();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchCall(1).init.signal.aborted).toBe(false);
+    expect(abortErrors).toHaveLength(0);
+  });
+
+  it('ends the pause at once when the caller aborts, rejecting with an AbortError and sending no retry', async () => {
+    const failure = new TypeError('Network request failed');
+    mockFetch(failure, jsonResponse(topHeadlinesUs));
+    const controller = new AbortController();
+    const addListener = jest.spyOn(controller.signal, 'addEventListener');
+    const removeListener = jest.spyOn(controller.signal, 'removeEventListener');
+    const outcome = rejectionOf(getArticles(USA_TOP_HEADLINES, controller.signal));
+
+    await jest.advanceTimersByTimeAsync(NETWORK_RETRY_DELAY_MS - 1);
+    controller.abort();
+
+    expect(jest.getTimerCount()).toBe(0);
+
+    await jest.advanceTimersByTimeAsync(NETWORK_RETRY_DELAY_MS);
+    const error = await outcome;
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error).toHaveProperty('name', 'AbortError');
+    expect(error).not.toBeInstanceOf(NewsApiServiceError);
+    expect(error).not.toBe(failure);
+    expect(abortErrors).toHaveLength(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(addListener).toHaveBeenCalledTimes(2);
+    for (const [, listener] of addListener.mock.calls) {
+      expect(removeListener).toHaveBeenCalledWith('abort', listener);
+    }
   });
 });
 
@@ -440,8 +574,11 @@ describe('getArticles timeout', () => {
     expect(jest.getTimerCount()).toBe(0);
 
     mockFetch(new TypeError('Network request failed'), jsonResponse(EMPTY_PAGE_BODY));
-    await getArticles(USA_TOP_HEADLINES);
+    const retried = getArticles(USA_TOP_HEADLINES);
+    await jest.advanceTimersByTimeAsync(NETWORK_RETRY_DELAY_MS);
+    await retried;
 
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(jest.getTimerCount()).toBe(0);
   });
 });

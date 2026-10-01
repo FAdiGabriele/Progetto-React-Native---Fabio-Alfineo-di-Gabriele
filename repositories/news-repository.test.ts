@@ -65,29 +65,40 @@ const REQUESTS: Record<RequestName, NewsApiRequestDto> = {
   usaMore: moreRequestOf(USA_SECTION),
 };
 
-const SERVICE_FAILURES: { label: string; error: NewsApiServiceError; kind: NewsErrorKind }[] = [
-  {
-    label: 'HTTP 400',
-    error: new NewsApiServiceError('http', { status: 400, code: 'parametersMissing' }),
-    kind: 'badRequest',
-  },
-  { label: 'HTTP 401', error: new NewsApiServiceError('http', { status: 401, code: 'apiKeyInvalid' }), kind: 'auth' },
-  {
-    label: 'HTTP 429',
-    error: new NewsApiServiceError('http', { status: 429, code: 'rateLimited' }),
-    kind: 'rateLimit',
-  },
-  {
-    label: 'HTTP 500',
-    error: new NewsApiServiceError('http', { status: 500, code: 'unexpectedError' }),
-    kind: 'server',
-  },
-  {
-    label: 'HTTP 426',
-    error: new NewsApiServiceError('http', { status: 426, code: 'maximumResultsReached' }),
-    kind: 'unknown',
-  },
-  { label: 'HTTP 503', error: new NewsApiServiceError('http', { status: 503 }), kind: 'unknown' },
+type ServiceFailure = { label: string; error: NewsApiServiceError; kind: NewsErrorKind };
+
+// An HTTP failure with its status and, when given, its NewsAPI code, labelled by both.
+function httpFailure(status: number, code: string | undefined, kind: NewsErrorKind): ServiceFailure {
+  const label = code === undefined ? `HTTP ${status} without a code` : `HTTP ${status} with code ${code}`;
+  return { label, error: new NewsApiServiceError('http', { status, code }), kind };
+}
+
+const SERVICE_FAILURES: ServiceFailure[] = [
+  httpFailure(400, 'parametersMissing', 'badRequest'),
+  httpFailure(401, 'apiKeyInvalid', 'auth'),
+  httpFailure(429, 'rateLimited', 'rateLimit'),
+  httpFailure(429, 'apiKeyExhausted', 'quotaExhausted'),
+  httpFailure(429, undefined, 'rateLimit'),
+  httpFailure(429, 'tooManyRequests', 'rateLimit'),
+  httpFailure(426, 'maximumResultsReached', 'resultsLimit'),
+  httpFailure(426, undefined, 'unknown'),
+  httpFailure(500, 'unexpectedError', 'server'),
+  httpFailure(500, undefined, 'server'),
+  httpFailure(502, undefined, 'server'),
+  httpFailure(503, undefined, 'server'),
+  httpFailure(504, undefined, 'server'),
+  httpFailure(599, undefined, 'server'),
+  httpFailure(499, undefined, 'unknown'),
+  httpFailure(600, undefined, 'unknown'),
+  httpFailure(401, 'apiKeyExhausted', 'quotaExhausted'),
+  httpFailure(403, 'rateLimited', 'rateLimit'),
+  httpFailure(400, 'maximumResultsReached', 'resultsLimit'),
+  httpFailure(401, 'somethingElse', 'auth'),
+  // Names of Object.prototype members, which a lookup in a plain object would find.
+  httpFailure(403, 'constructor', 'unknown'),
+  httpFailure(404, 'toString', 'unknown'),
+  httpFailure(418, '__proto__', 'unknown'),
+  { label: 'an HTTP error without status or code', error: new NewsApiServiceError('http'), kind: 'unknown' },
   {
     label: 'an invalid response',
     error: new NewsApiServiceError('invalidResponse', { status: 200 }),

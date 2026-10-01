@@ -1,9 +1,9 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
 
 import { en } from '@/i18n/en';
 import { it, type Dictionary, type TranslationKey } from '@/i18n/it';
 import type { Language } from '@/repositories/language-model';
-import { getSavedLanguage, saveLanguage } from '@/repositories/language-repository';
+import { saveLanguage } from '@/repositories/language-repository';
 
 export type Locale = 'it-IT' | 'en-US';
 
@@ -42,36 +42,21 @@ function translate(dictionary: Dictionary, key: TranslationKey, params?: Transla
 const I18nContext = createContext<I18n | null>(null);
 
 /**
- * Provides the interface language to its children, which render only once the saved
- * language has been read; without a valid saved value the language is Italian.
+ * Provides the interface language to its children, starting from the saved language read
+ * at startup; without a valid saved value the language is Italian.
  */
-export function I18nProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguage] = useState<Language | null>(null);
+export function I18nProvider({
+  initialLanguage,
+  children,
+}: {
+  /** Saved language, or null when there is no valid one. */
+  initialLanguage: Language | null;
+  children: ReactNode;
+}) {
+  const [language, setLanguage] = useState<Language>(initialLanguage ?? DEFAULT_LANGUAGE);
 
-  useEffect(() => {
-    let cancelled = false;
-    getSavedLanguage().then(
-      (saved) => {
-        if (!cancelled) {
-          setLanguage(saved ?? DEFAULT_LANGUAGE);
-        }
-      },
-      () => {
-        if (!cancelled) {
-          setLanguage(DEFAULT_LANGUAGE);
-        }
-      }
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const value = useMemo<I18n | null>(() => {
-    if (language === null) {
-      return null;
-    }
-    return {
+  const value = useMemo<I18n>(
+    () => ({
       language,
       locale: LOCALES[language],
       t: (key, params) => translate(DICTIONARIES[language], key, params),
@@ -80,12 +65,10 @@ export function I18nProvider({ children }: { children: ReactNode }) {
         setLanguage(next);
         saveLanguage(next).catch(() => {});
       },
-    };
-  }, [language]);
+    }),
+    [language]
+  );
 
-  if (value === null) {
-    return null;
-  }
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 

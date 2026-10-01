@@ -4,12 +4,13 @@
  * This is the only file to edit to change the base URL, the number of
  * articles fetched by each top-headlines request, the number of articles per
  * page of the more-news request of each section, the maximum number of
- * results asked to a request across its pages, or the request timeout.
- * The service reads the base URL, the timeout, the API key and the fixture
- * mode flag; the news sections list reads the two page sizes; the repository
- * reads the maximum number of results. The sections and the parameters of
- * their requests, such as the country or the domains, are defined in
- * `constants/news-sections.ts`.
+ * results asked to a request across its pages, the request timeout, or the
+ * pause before the retry of a request that failed on the network.
+ * The service reads the base URL, the timeout, the retry pause, the API key
+ * and the fixture mode flag; the news sections list reads the two page sizes;
+ * the repository reads the maximum number of results. The sections and the
+ * parameters of their requests, such as the country or the domains, are
+ * defined in `constants/news-sections.ts`.
  *
  * The API key comes from the `.env` file (`EXPO_PUBLIC_NEWS_API_KEY`
  * variable, template in `.env.example`); restart the dev server after
@@ -40,6 +41,12 @@ export const NEWS_MAX_RESULTS = 100;
 
 /** Request timeout in milliseconds, read by the service. */
 export const REQUEST_TIMEOUT_MS = 10000;
+
+/**
+ * Pause in milliseconds before the only retry of a request that failed on the network,
+ * read by the service: an immediate retry would fail in the same way.
+ */
+export const NETWORK_RETRY_DELAY_MS = 1000;
 
 /** NewsAPI key, read once here by the service. */
 export const NEWS_API_KEY: string = process.env.EXPO_PUBLIC_NEWS_API_KEY ?? '';
