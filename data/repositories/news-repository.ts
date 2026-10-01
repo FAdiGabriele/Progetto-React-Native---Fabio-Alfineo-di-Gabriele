@@ -70,8 +70,30 @@ function toNewsErrorKind(error: NewsApiServiceError): NewsErrorKind {
   }
 }
 
+// What to check for the errors that only a developer can fix.
+const DEVELOPER_HINTS: Partial<Record<NewsErrorKind, string>> = {
+  auth: 'Check EXPO_PUBLIC_NEWS_API_KEY in the .env file and restart the development server.',
+  badRequest: 'Check the requests in data/repositories/news-section-requests.ts.',
+};
+
+// The user reads a neutral message: the details of a configuration error go to the log.
+function logConfigurationError(error: NewsApiServiceError, kind: NewsErrorKind): void {
+  const hint = DEVELOPER_HINTS[kind];
+  if (hint === undefined) {
+    return;
+  }
+  const details = [error.reason, error.status, error.code, error.message].filter(
+    (detail) => detail !== undefined
+  );
+  console.warn(`NewsAPI configuration error (${[...new Set(details)].join(', ')}). ${hint}`);
+}
+
 function toNewsError(error: unknown): NewsError {
-  const kind = error instanceof NewsApiServiceError ? toNewsErrorKind(error) : 'unknown';
+  let kind: NewsErrorKind = 'unknown';
+  if (error instanceof NewsApiServiceError) {
+    kind = toNewsErrorKind(error);
+    logConfigurationError(error, kind);
+  }
   const newsError = new NewsError(kind);
   newsError.cause = error;
   return newsError;

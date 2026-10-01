@@ -17,7 +17,7 @@ export default function RootLayout() {
   );
 }
 
-// Only inside the bootstrap, which mounts the theme provider, the context has the chosen theme.
+// Only inside the bootstrap, which mounts the theme provider, the context has the active theme.
 function ThemedNavigator() {
   const isDark = useColorScheme() === 'dark';
 

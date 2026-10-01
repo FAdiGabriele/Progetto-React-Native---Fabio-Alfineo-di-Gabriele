@@ -20,7 +20,7 @@ jest.mock('@/i18n/i18n-provider', () => {
       params?.[name] === undefined ? placeholder : String(params[name])
     );
   return {
-    useI18n: () => ({ language: 'it', locale: 'it-IT', t: translate, toggleLanguage: jest.fn() }),
+    useI18n: () => ({ language: 'it', locale: 'it-IT', t: translate, setLanguage: jest.fn() }),
   };
 });
 
@@ -92,7 +92,7 @@ function viewModel(overrides: Partial<NewsViewModel> = {}): NewsViewModel {
     ],
     groups: GROUPS,
     errorMessage: null,
-    updatedAtLabel: 'Aggiornato alle 14:30',
+    updatedAtLabel: 'Ultimo controllo alle 14:30',
     notice: null,
     hasMore: true,
     loadMoreFailed: false,
@@ -141,7 +141,7 @@ describe('NewsScreen', () => {
     expect(screen.getByRole('button', { name: 'Italia' })).toBeSelected();
     expect(screen.getByRole('button', { name: 'USA' })).toBeOnTheScreen();
     expect(screen.queryByText('Prime pagine')).toBeNull();
-    expect(screen.queryByText(/^Aggiornato/)).toBeNull();
+    expect(screen.queryByText(/^Ultimo controllo/)).toBeNull();
   });
 
   it('shows the error state with the message and a retry button when the load failed without articles', async () => {
@@ -172,7 +172,7 @@ describe('NewsScreen', () => {
     expect(screen.getByRole('header', { name: 'Ultime da ANSA' })).toBeOnTheScreen();
     expect(screen.getAllByRole('link')).toHaveLength(3);
     expect(screen.getByText('Title third')).toBeOnTheScreen();
-    expect(screen.getByText('Aggiornato alle 14:30')).toBeOnTheScreen();
+    expect(screen.getByText('Ultimo controllo alle 14:30')).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: 'Italia' })).toBeSelected();
     expect(screen.getByRole('button', { name: 'USA' })).not.toBeSelected();
   });
@@ -268,7 +268,7 @@ describe('NewsScreen', () => {
       await fireEvent.press(screen.getByRole('button', { name: 'Aggiorna' }));
 
       expect(model.refresh).toHaveBeenCalledTimes(1);
-      expect(screen.getByText('Aggiornato alle 14:30')).toBeOnTheScreen();
+      expect(screen.getByText('Ultimo controllo alle 14:30')).toBeOnTheScreen();
     });
 
     it('shows the refresh button busy during a refresh', async () => {

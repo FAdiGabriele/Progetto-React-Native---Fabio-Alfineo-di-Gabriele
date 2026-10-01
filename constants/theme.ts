@@ -67,5 +67,5 @@ export const Layout = {
   horizontalMargin: { mobile: 24, desktop: 32 },
   cardGap: { mobile: 12, desktop: 16 },
   minCardWidth: 320,
-  minColumns: 3,
+  minColumns: 2,
 };

@@ -88,4 +88,19 @@ describe('NewsImage', () => {
     expect(screen.root).toHaveStyle({ backgroundColor: Colors[scheme].placeholder });
     expect(placeholderIcon()).toHaveStyle({ color: Colors[scheme].icon });
   });
+
+  it.each(THEMES)('fills the frame of the image with the placeholder color of the %s theme while it loads', async (scheme) => {
+    await render(
+      <ColorSchemeContext.Provider value={scheme}>
+        <NewsImage imageUrl={IMAGE_URL} />
+      </ColorSchemeContext.Provider>
+    );
+
+    expect(images()).toHaveLength(1);
+    expect(images()[0]).toHaveStyle({
+      width: '100%',
+      aspectRatio: 16 / 9,
+      backgroundColor: Colors[scheme].placeholder,
+    });
+  });
 });

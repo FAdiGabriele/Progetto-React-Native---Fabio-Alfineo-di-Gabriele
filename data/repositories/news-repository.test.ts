@@ -68,17 +68,26 @@ const REQUESTS: Record<RequestName, NewsApiRequestDto> = {
   usaMore: moreRequestOf('usa'),
 };
 
-type ServiceFailure = { label: string; error: NewsApiServiceError; kind: NewsErrorKind };
+// The failure, the kind of its NewsError and, for a configuration error, the warning it logs.
+type ServiceFailure = { label: string; error: NewsApiServiceError; kind: NewsErrorKind; warning?: string };
+
+const AUTH_HINT = 'Check EXPO_PUBLIC_NEWS_API_KEY in the .env file and restart the development server.';
+const BAD_REQUEST_HINT = 'Check the requests in data/repositories/news-section-requests.ts.';
 
 // An HTTP failure with its status and, when given, its NewsAPI code, labelled by both.
-function httpFailure(status: number, code: string | undefined, kind: NewsErrorKind): ServiceFailure {
+function httpFailure(status: number, code: string | undefined, kind: NewsErrorKind, warning?: string): ServiceFailure {
   const label = code === undefined ? `HTTP ${status} without a code` : `HTTP ${status} with code ${code}`;
-  return { label, error: new NewsApiServiceError('http', { status, code }), kind };
+  return { label, error: new NewsApiServiceError('http', { status, code }), kind, warning };
 }
 
 const SERVICE_FAILURES: ServiceFailure[] = [
-  httpFailure(400, 'parametersMissing', 'badRequest'),
-  httpFailure(401, 'apiKeyInvalid', 'auth'),
+  httpFailure(
+    400,
+    'parametersMissing',
+    'badRequest',
+    `NewsAPI configuration error (http, 400, parametersMissing, HTTP 400). ${BAD_REQUEST_HINT}`
+  ),
+  httpFailure(401, 'apiKeyInvalid', 'auth', `NewsAPI configuration error (http, 401, apiKeyInvalid, HTTP 401). ${AUTH_HINT}`),
   httpFailure(429, 'rateLimited', 'rateLimit'),
   httpFailure(429, 'apiKeyExhausted', 'quotaExhausted'),
   httpFailure(429, undefined, 'rateLimit'),
@@ -96,7 +105,7 @@ const SERVICE_FAILURES: ServiceFailure[] = [
   httpFailure(401, 'apiKeyExhausted', 'quotaExhausted'),
   httpFailure(403, 'rateLimited', 'rateLimit'),
   httpFailure(400, 'maximumResultsReached', 'resultsLimit'),
-  httpFailure(401, 'somethingElse', 'auth'),
+  httpFailure(401, 'somethingElse', 'auth', `NewsAPI configuration error (http, 401, somethingElse, HTTP 401). ${AUTH_HINT}`),
   // Names of Object.prototype members, which a lookup in a plain object would find.
   httpFailure(403, 'constructor', 'unknown'),
   httpFailure(404, 'toString', 'unknown'),
@@ -113,18 +122,34 @@ const SERVICE_FAILURES: ServiceFailure[] = [
     kind: 'network',
   },
   { label: 'a timeout', error: new NewsApiServiceError('timeout'), kind: 'timeout' },
-  { label: 'a missing key', error: new NewsApiServiceError('missingKey'), kind: 'auth' },
+  {
+    label: 'a missing key',
+    error: new NewsApiServiceError('missingKey'),
+    kind: 'auth',
+    warning: `NewsAPI configuration error (missingKey). ${AUTH_HINT}`,
+  },
 ];
 
 const SAVED_AT = '2026-09-27T08:00:00.000Z';
 const UNKNOWN_SECTION = 'france' as unknown as NewsSectionKey;
+
+let consoleWarn: jest.SpyInstance;
 
 beforeEach(() => {
   jest.resetAllMocks();
   getArticlesMock.mockRejectedValue(new Error('Unexpected call to getArticles'));
   readEntryMock.mockResolvedValue(null);
   writeEntryMock.mockResolvedValue(undefined);
+  consoleWarn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 });
+
+afterEach(() => {
+  jest.restoreAllMocks();
+});
+
+// The warnings logged so far, one array of arguments per call.
+const warnings = () => consoleWarn.mock.calls;
+const expectedWarnings = (warning: string | undefined) => (warning === undefined ? [] : [[warning]]);
 
 // The name of a request of the sections, whatever its page.
 function nameOf(request: NewsApiRequestDto): RequestName {
@@ -438,7 +463,7 @@ describe('newsRepository.getSectionArticles, groups of a complete first page', (
 describe('newsRepository.getSectionArticles, partial first page', () => {
   it.each(SERVICE_FAILURES)(
     'returns the front pages with partialError $kind when the ANSA request fails with $label, saving nothing',
-    async ({ error, kind }) => {
+    async ({ error, kind, warning }) => {
       answer({ frontPages: pageOf(ITALY_HEADLINE_DTOS), latestAnsa: error });
 
       const page = await newsRepository.getSectionArticles('italy');
@@ -451,6 +476,7 @@ describe('newsRepository.getSectionArticles, partial first page', () => {
       expect(page.partialError?.cause).toBe(error);
       expect(page.next).toEqual({ page: 1 });
       expect(writeEntryMock).not.toHaveBeenCalled();
+      expect(warnings()).toEqual(expectedWarnings(warning));
     }
   );
 
@@ -705,7 +731,7 @@ describe('newsRepository.getSectionArticles with a cursor', () => {
 
   it.each(SERVICE_FAILURES)(
     'rejects with NewsError $kind when the more-news request fails with $label',
-    async ({ error, kind }) => {
+    async ({ error, kind, warning }) => {
       answer({ italyMore: error });
 
       const newsError = await newsErrorOf(newsRepository.getSectionArticles('italy', undefined, { page: 3 }));
@@ -714,6 +740,7 @@ describe('newsRepository.getSectionArticles with a cursor', () => {
       expect(newsError.cause).toBe(error);
       expect(getArticlesMock.mock.calls.map(([request]) => request)).toEqual([{ ...REQUESTS.italyMore, page: 3 }]);
       expect(writeEntryMock).not.toHaveBeenCalled();
+      expect(warnings()).toEqual(expectedWarnings(warning));
     }
   );
 
@@ -746,6 +773,124 @@ describe('newsRepository.getSectionArticles with a cursor', () => {
 
     expect(error.kind).toBe('server');
     expect(error.cause).toBe(failure);
+  });
+});
+
+describe('newsRepository.getSectionArticles, configuration errors in the log', () => {
+  const MISSING_KEY: Required<ServiceFailure> = {
+    label: 'a missing key',
+    error: new NewsApiServiceError('missingKey'),
+    kind: 'auth',
+    warning: `NewsAPI configuration error (missingKey). ${AUTH_HINT}`,
+  };
+  const INVALID_KEY: Required<ServiceFailure> = {
+    label: 'HTTP 401 with the NewsAPI code and message',
+    error: new NewsApiServiceError('http', {
+      status: 401,
+      code: 'apiKeyInvalid',
+      message: 'Your API key is invalid or incorrect.',
+    }),
+    kind: 'auth',
+    warning: `NewsAPI configuration error (http, 401, apiKeyInvalid, Your API key is invalid or incorrect.). ${AUTH_HINT}`,
+  };
+  const UNAUTHORIZED: Required<ServiceFailure> = {
+    label: 'HTTP 401 without NewsAPI code and message',
+    error: new NewsApiServiceError('http', { status: 401 }),
+    kind: 'auth',
+    warning: `NewsAPI configuration error (http, 401, HTTP 401). ${AUTH_HINT}`,
+  };
+  const INVALID_PARAMETER: Required<ServiceFailure> = {
+    label: 'HTTP 400 with the NewsAPI code and message',
+    error: new NewsApiServiceError('http', {
+      status: 400,
+      code: 'parameterInvalid',
+      message: 'The pageSize parameter is invalid.',
+    }),
+    kind: 'badRequest',
+    warning: `NewsAPI configuration error (http, 400, parameterInvalid, The pageSize parameter is invalid.). ${BAD_REQUEST_HINT}`,
+  };
+  const BAD_REQUEST: Required<ServiceFailure> = {
+    label: 'HTTP 400 without NewsAPI code and message',
+    error: new NewsApiServiceError('http', { status: 400 }),
+    kind: 'badRequest',
+    warning: `NewsAPI configuration error (http, 400, HTTP 400). ${BAD_REQUEST_HINT}`,
+  };
+  const REPEATED_DETAIL: Required<ServiceFailure> = {
+    label: 'HTTP 400 with a message equal to the code',
+    error: new NewsApiServiceError('http', { status: 400, code: 'parametersMissing', message: 'parametersMissing' }),
+    kind: 'badRequest',
+    warning: `NewsAPI configuration error (http, 400, parametersMissing). ${BAD_REQUEST_HINT}`,
+  };
+
+  it.each([MISSING_KEY, INVALID_KEY, UNAUTHORIZED, INVALID_PARAMETER, BAD_REQUEST, REPEATED_DETAIL])(
+    'logs one warning with the details of $label and rejects with NewsError $kind when the only request of USA fails',
+    async ({ error, kind, warning }) => {
+      answer({ topHeadlines: error });
+
+      const newsError = await newsErrorOf(newsRepository.getSectionArticles('usa'));
+
+      expect(newsError.kind).toBe(kind);
+      expect(newsError.cause).toBe(error);
+      expect(warnings()).toEqual([[warning]]);
+    }
+  );
+
+  it('logs one warning only, for the first request, when both requests of Italy fail with a configuration error', async () => {
+    answer({ frontPages: INVALID_PARAMETER.error, latestAnsa: INVALID_KEY.error });
+
+    const error = await newsErrorOf(newsRepository.getSectionArticles('italy'));
+
+    expect(error.kind).toBe('badRequest');
+    expect(warnings()).toEqual([[INVALID_PARAMETER.warning]]);
+  });
+
+  it('logs one warning for every error it translates, load after load', async () => {
+    answer({ frontPages: pageOf(ITALY_HEADLINE_DTOS), latestAnsa: MISSING_KEY.error, italyMore: BAD_REQUEST.error });
+
+    await newsRepository.getSectionArticles('italy');
+    await newsErrorOf(newsRepository.getSectionArticles('italy', undefined, { page: 1 }));
+    await newsErrorOf(newsRepository.getSectionArticles('italy', undefined, { page: 1 }));
+
+    expect(warnings()).toEqual([[MISSING_KEY.warning], [BAD_REQUEST.warning], [BAD_REQUEST.warning]]);
+  });
+
+  it('logs nothing for a cancellation, even when the other request failed with a configuration error', async () => {
+    const abortError = createAbortError();
+    answer({ frontPages: abortError, latestAnsa: INVALID_KEY.error, italyMore: createAbortError() });
+
+    await expect(rejectionOf(newsRepository.getSectionArticles('italy'))).resolves.toBe(abortError);
+    await expect(rejectionOf(newsRepository.getSectionArticles('italy', undefined, { page: 2 }))).resolves.toHaveProperty(
+      'name',
+      'AbortError'
+    );
+
+    expect(warnings()).toEqual([]);
+  });
+
+  it('logs nothing for an error that is not a service error', async () => {
+    answer({ frontPages: pageOf(ITALY_HEADLINE_DTOS), latestAnsa: new Error('Unexpected failure') });
+
+    const page = await newsRepository.getSectionArticles('italy');
+
+    expect(page.partialError?.kind).toBe('unknown');
+    expect(warnings()).toEqual([]);
+  });
+
+  it('logs nothing for complete pages, pages of more news and saved lists', async () => {
+    answer({
+      frontPages: pageOf(ITALY_HEADLINE_DTOS),
+      latestAnsa: pageOf(ANSA_DTOS),
+      topHeadlines: pageOf(USA_HEADLINE_DTOS),
+      italyMore: pageOf(ITALY_MORE_DTOS, 25085),
+    });
+    readEntryMock.mockResolvedValue({ savedAt: SAVED_AT, requests: [USA_HEADLINE_DTOS] });
+
+    await newsRepository.getSectionArticles('italy');
+    await newsRepository.getSectionArticles('usa');
+    await newsRepository.getSectionArticles('italy', undefined, { page: 2 });
+    await newsRepository.getSavedSectionArticles('usa');
+
+    expect(warnings()).toEqual([]);
   });
 });
 

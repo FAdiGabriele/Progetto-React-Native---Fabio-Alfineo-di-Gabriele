@@ -7,16 +7,44 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { ListRow } from '@/components/ui/list-row';
-import { useI18n } from '@/i18n/i18n-provider';
+import { SegmentedControl, type SegmentedControlOption } from '@/components/ui/segmented-control';
+import type { Language } from '@/domain/models/language-model';
+import type { ThemePreference } from '@/domain/models/theme-model';
+import { useI18n, type I18n } from '@/i18n/i18n-provider';
+import type { TranslationKey } from '@/i18n/it';
 import { useSettingsViewModel } from '@/screens/settings/use-settings-view-model';
 import { useThemePreference } from '@/theme/theme-preference-provider';
 import { getNewsLayout } from '@/utils/layout';
 
+type SettingChoice<Key extends string> = { key: Key; labelKey: TranslationKey };
+
+const THEME_CHOICES: readonly SettingChoice<ThemePreference>[] = [
+  { key: 'system', labelKey: 'settings.themeSystem' },
+  { key: 'light', labelKey: 'settings.themeLight' },
+  { key: 'dark', labelKey: 'settings.themeDark' },
+];
+
+const LANGUAGE_CHOICES: readonly SettingChoice<Language>[] = [
+  { key: 'it', labelKey: 'language.italian' },
+  { key: 'en', labelKey: 'language.english' },
+];
+
+// The screen reader reads every option with the name of its setting, as in "Theme: Dark".
+function toOptions<Key extends string>(
+  choices: readonly SettingChoice<Key>[],
+  name: string,
+  t: I18n['t']
+): SegmentedControlOption<Key>[] {
+  return choices.map(({ key, labelKey }) => {
+    const label = t(labelKey);
+    return { key, label, accessibilityLabel: t('settings.optionA11y', { name, value: label }) };
+  });
+}
+
 export function SettingsScreen() {
   const { appVersion } = useSettingsViewModel();
-  const { language, t, toggleLanguage } = useI18n();
-  const { theme, toggleTheme } = useThemePreference();
+  const { language, t, setLanguage } = useI18n();
+  const { preference, setPreference } = useThemePreference();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { horizontalMargin } = getNewsLayout(width);
@@ -26,10 +54,10 @@ export function SettingsScreen() {
     [t]
   );
 
-  const themeLabel = t('settings.theme');
-  const themeValue = t(theme === 'dark' ? 'settings.themeDark' : 'settings.themeLight');
-  const languageLabel = t('settings.language');
-  const languageValue = t(language === 'it' ? 'language.italian' : 'language.english');
+  const themeName = t('settings.theme');
+  const languageName = t('settings.language');
+  const themeOptions = useMemo(() => toOptions(THEME_CHOICES, themeName, t), [themeName, t]);
+  const languageOptions = useMemo(() => toOptions(LANGUAGE_CHOICES, languageName, t), [languageName, t]);
 
   return (
     <ThemedView style={styles.container}>
@@ -48,19 +76,25 @@ export function SettingsScreen() {
           },
         ]}
       >
-        <View>
-          <ListRow
-            label={themeLabel}
-            value={themeValue}
-            accessibilityLabel={t('settings.rowA11y', { name: themeLabel, value: themeValue })}
-            onPress={toggleTheme}
-          />
-          <ListRow
-            label={languageLabel}
-            value={languageValue}
-            accessibilityLabel={t('settings.rowA11y', { name: languageLabel, value: languageValue })}
-            onPress={toggleLanguage}
-          />
+        <View style={styles.settings}>
+          <View style={styles.setting}>
+            <ThemedText style={styles.settingName}>{themeName}</ThemedText>
+            <SegmentedControl
+              options={themeOptions}
+              selectedKey={preference}
+              onSelect={setPreference}
+              accessibilityLabel={themeName}
+            />
+          </View>
+          <View style={styles.setting}>
+            <ThemedText style={styles.settingName}>{languageName}</ThemedText>
+            <SegmentedControl
+              options={languageOptions}
+              selectedKey={language}
+              onSelect={setLanguage}
+              accessibilityLabel={languageName}
+            />
+          </View>
         </View>
         <View style={styles.footer}>
           {appVersion !== null && (
@@ -88,7 +122,19 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'space-between',
     gap: 24,
-    paddingTop: 8,
+    paddingTop: 16,
+  },
+  settings: {
+    width: '100%',
+    maxWidth: 480,
+    gap: 24,
+  },
+  setting: {
+    gap: 8,
+  },
+  settingName: {
+    fontSize: 17,
+    lineHeight: 22,
   },
   footer: {
     alignItems: 'center',
