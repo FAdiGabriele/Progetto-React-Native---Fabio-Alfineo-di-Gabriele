@@ -1,42 +1,20 @@
 import { NEWS_MORE_PAGE_SIZE, NEWS_PAGE_SIZE } from '@/constants/config';
-
-/**
- * Key of a group of the news list, the block of cards that shows the articles of one request
- * under its own heading: the text `groups.<key>` of the dictionaries.
- */
-export type NewsGroupKey = 'frontPages' | 'latestAnsa' | 'topHeadlines' | 'moreNews';
-
-// Same shape as the request type of the NewsAPI service, declared here because
-// constants import no layer; the repository passes these requests to the service,
-// where the type check happens.
-type NewsApiRequest =
-  | { endpoint: 'top-headlines'; country: string; pageSize: number }
-  | { endpoint: 'top-headlines'; sources: string[]; pageSize: number }
-  | {
-      endpoint: 'everything';
-      domains: string[];
-      language: string;
-      sortBy: 'publishedAt';
-      pageSize: number;
-    };
+import type { NewsApiRequestDto } from '@/data/services/news-api-dto';
+import type { NewsGroupKey, NewsSectionKey } from '@/domain/models/news-model';
 
 /** A request of a section and the group of the list that shows its articles. */
-type NewsSectionRequest = { group: NewsGroupKey; request: NewsApiRequest };
+export type NewsSectionRequest = { group: NewsGroupKey; request: NewsApiRequestDto };
 
-type NewsSection<Key extends string> = {
-  key: Key;
-  labelKey: `categories.${Key}`;
+export type NewsSectionRequests = {
   /** Requests of the first page, in the order of their groups in the list; they have no later pages. */
   requests: NewsSectionRequest[];
   /** Request of the more news at the end of the list, one page at a time; without it the section loads no more news. */
   moreRequest?: NewsSectionRequest;
 };
 
-/** Ordered list of the news sections; the first one is selected at startup. */
-export const NEWS_SECTIONS: readonly [NewsSection<'italy'>, NewsSection<'usa'>] = [
-  {
-    key: 'italy',
-    labelKey: 'categories.italy',
+/** The NewsAPI requests of every news section. */
+export const NEWS_SECTION_REQUESTS: Record<NewsSectionKey, NewsSectionRequests> = {
+  italy: {
     requests: [
       {
         group: 'frontPages',
@@ -68,9 +46,7 @@ export const NEWS_SECTIONS: readonly [NewsSection<'italy'>, NewsSection<'usa'>] 
       },
     },
   },
-  {
-    key: 'usa',
-    labelKey: 'categories.usa',
+  usa: {
     requests: [
       {
         group: 'topHeadlines',
@@ -111,7 +87,4 @@ export const NEWS_SECTIONS: readonly [NewsSection<'italy'>, NewsSection<'usa'>] 
       },
     },
   },
-];
-
-/** Key of a news section, taken from the list above. */
-export type NewsSectionKey = (typeof NEWS_SECTIONS)[number]['key'];
+};

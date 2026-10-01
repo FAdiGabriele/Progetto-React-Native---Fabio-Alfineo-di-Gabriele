@@ -1,9 +1,9 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
 
+import { languageRepository } from '@/container';
+import type { Language } from '@/domain/models/language-model';
 import { en } from '@/i18n/en';
 import { it, type Dictionary, type TranslationKey } from '@/i18n/it';
-import type { Language } from '@/repositories/language-model';
-import { saveLanguage } from '@/repositories/language-repository';
 
 export type Locale = 'it-IT' | 'en-US';
 
@@ -63,7 +63,7 @@ export function I18nProvider({
       toggleLanguage: () => {
         const next = OTHER_LANGUAGE[language];
         setLanguage(next);
-        saveLanguage(next).catch(() => {});
+        languageRepository.saveLanguage(next).catch(() => {});
       },
     }),
     [language]

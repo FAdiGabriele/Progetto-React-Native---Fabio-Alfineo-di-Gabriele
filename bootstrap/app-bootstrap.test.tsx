@@ -3,15 +3,16 @@ import * as SplashScreen from 'expo-splash-screen';
 import { Appearance, Platform, Pressable, Text } from 'react-native';
 
 import { AppBootstrap } from '@/bootstrap/app-bootstrap';
+import { languageRepository, themeRepository } from '@/container';
+import type { Language } from '@/domain/models/language-model';
+import type { Theme } from '@/domain/models/theme-model';
 import { useI18n } from '@/i18n/i18n-provider';
-import type { Language } from '@/repositories/language-model';
-import { getSavedLanguage, saveLanguage } from '@/repositories/language-repository';
-import type { Theme } from '@/repositories/theme-model';
-import { getSavedTheme, saveTheme } from '@/repositories/theme-repository';
 import { useThemePreference } from '@/theme/theme-preference-provider';
 
-jest.mock('@/repositories/theme-repository', () => ({ getSavedTheme: jest.fn(), saveTheme: jest.fn() }));
-jest.mock('@/repositories/language-repository', () => ({ getSavedLanguage: jest.fn(), saveLanguage: jest.fn() }));
+jest.mock('@/container', () => ({
+  themeRepository: { getSavedTheme: jest.fn(), saveTheme: jest.fn() },
+  languageRepository: { getSavedLanguage: jest.fn(), saveLanguage: jest.fn() },
+}));
 
 // The call made while the bootstrap module loads gets a promise that a test can reject later.
 jest.mock('expo-splash-screen', () => {
@@ -30,10 +31,10 @@ jest.mock('expo-splash-screen', () => {
 
 type Deferred<T> = { promise: Promise<T>; resolve: (value: T) => void; reject: (error: unknown) => void };
 
-const getSavedThemeMock = jest.mocked(getSavedTheme);
-const getSavedLanguageMock = jest.mocked(getSavedLanguage);
-const saveThemeMock = jest.mocked(saveTheme);
-const saveLanguageMock = jest.mocked(saveLanguage);
+const getSavedThemeMock = jest.mocked(themeRepository.getSavedTheme);
+const getSavedLanguageMock = jest.mocked(languageRepository.getSavedLanguage);
+const saveThemeMock = jest.mocked(themeRepository.saveTheme);
+const saveLanguageMock = jest.mocked(languageRepository.saveLanguage);
 const preventAutoHideAsyncMock = jest.mocked(SplashScreen.preventAutoHideAsync);
 const hideAsyncMock = jest.mocked(SplashScreen.hideAsync);
 const { loadCall } = jest.requireMock<{ loadCall: { reject?: (error: Error) => void } }>('expo-splash-screen');

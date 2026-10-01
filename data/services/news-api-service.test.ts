@@ -1,9 +1,9 @@
 import { NETWORK_RETRY_DELAY_MS, REQUEST_TIMEOUT_MS } from '@/constants/config';
-import everythingAnsa from '@/services/fixtures/everything-ansa.json';
-import topHeadlinesItaly from '@/services/fixtures/top-headlines-italy.json';
-import topHeadlinesUs from '@/services/fixtures/top-headlines-us.json';
-import type { NewsApiRequestDto } from '@/services/news-api-dto';
-import { getArticles, NewsApiServiceError } from '@/services/news-api-service';
+import everythingAnsa from '@/data/services/fixtures/everything-ansa.json';
+import topHeadlinesItaly from '@/data/services/fixtures/top-headlines-italy.json';
+import topHeadlinesUs from '@/data/services/fixtures/top-headlines-us.json';
+import type { NewsApiRequestDto } from '@/data/services/news-api-dto';
+import { getArticles, NewsApiServiceError } from '@/data/services/news-api-service';
 
 jest.mock('@/constants/config', () => ({
   ...jest.requireActual('@/constants/config'),
@@ -19,7 +19,7 @@ type FetchInit = { method: string; headers: Record<string, string>; signal: Abor
 // What a fetch call does: resolve with a response, reject with an error, or stay pending.
 type FetchOutcome = FakeResponse | Error | 'pending';
 
-type NewsApiService = typeof import('@/services/news-api-service');
+type NewsApiService = typeof import('@/data/services/news-api-service');
 
 const ITALY_FRONT_PAGES: NewsApiRequestDto = {
   endpoint: 'top-headlines',
@@ -176,7 +176,7 @@ function loadServiceWith(values: {
 }): NewsApiService {
   jest.resetModules();
   jest.doMock('@/constants/config', () => ({ ...jest.requireActual('@/constants/config'), ...values }));
-  return jest.requireActual<NewsApiService>('@/services/news-api-service');
+  return jest.requireActual<NewsApiService>('@/data/services/news-api-service');
 }
 
 describe('getArticles request', () => {

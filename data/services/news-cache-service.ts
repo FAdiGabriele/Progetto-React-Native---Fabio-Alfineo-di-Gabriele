@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import type { NewsCacheEntryDto } from '@/services/news-api-dto';
+import type { NewsCacheEntryDto } from '@/data/services/news-api-dto';
 
 const STORAGE_KEY_PREFIX = 'news-app.news-cache.';
 

@@ -1,11 +1,12 @@
-import { appendGroups, mapArticles, mapGroups } from '@/repositories/news-mapper';
-import type { Article, NewsGroup } from '@/repositories/news-model';
-import everythingAnsa from '@/services/fixtures/everything-ansa.json';
-import everythingItaly from '@/services/fixtures/everything-italy.json';
-import everythingUs from '@/services/fixtures/everything-us.json';
-import topHeadlinesItaly from '@/services/fixtures/top-headlines-italy.json';
-import topHeadlinesUs from '@/services/fixtures/top-headlines-us.json';
-import type { NewsApiArticleDto } from '@/services/news-api-dto';
+import { mapArticles, mapGroups } from '@/data/repositories/news-mapper';
+import everythingAnsa from '@/data/services/fixtures/everything-ansa.json';
+import everythingItaly from '@/data/services/fixtures/everything-italy.json';
+import everythingUs from '@/data/services/fixtures/everything-us.json';
+import topHeadlinesItaly from '@/data/services/fixtures/top-headlines-italy.json';
+import topHeadlinesUs from '@/data/services/fixtures/top-headlines-us.json';
+import type { NewsApiArticleDto } from '@/data/services/news-api-dto';
+import { appendGroups } from '@/domain/models/news-groups';
+import type { Article } from '@/domain/models/news-model';
 
 const italySection: NewsApiArticleDto[] = [...topHeadlinesItaly.articles, ...everythingAnsa.articles];
 const usaSection: NewsApiArticleDto[] = topHeadlinesUs.articles;
@@ -657,95 +658,10 @@ describe('mapGroups', () => {
   });
 });
 
-describe('appendGroups', () => {
+describe('appendGroups with the section fixtures', () => {
   function makeArticle(title: string, url: string, sourceName = 'ANSA.it'): Article {
     return { id: url, title, url, sourceName };
   }
-
-  function makeDatedArticle(title: string, url: string, publishedAt: string): Article {
-    return { ...makeArticle(title, url), publishedAt: new Date(publishedAt) };
-  }
-
-  function group(key: string, ...articles: Article[]): NewsGroup {
-    return { key, articles };
-  }
-
-  const first = makeArticle('First', 'https://example.com/1');
-  const second = makeArticle('Second', 'https://example.com/2');
-  const third = makeArticle('Third', 'https://example.com/3');
-  const fourth = makeArticle('Fourth', 'https://example.com/4');
-
-  it('extends the last group when the new group has its key, in order, without changing the current list', () => {
-    const current = [group('top', first), group('more', second)];
-
-    expect(appendGroups(current, [group('more', third, fourth)])).toEqual([
-      group('top', first),
-      group('more', second, third, fourth),
-    ]);
-    expect(current).toEqual([group('top', first), group('more', second)]);
-  });
-
-  it('adds a new group after the current ones when the key differs from the last one', () => {
-    expect(appendGroups([group('top', first)], [group('more', second)])).toEqual([
-      group('top', first),
-      group('more', second),
-    ]);
-    expect(appendGroups([group('more', first), group('top', second)], [group('more', third)])).toEqual([
-      group('more', first),
-      group('top', second),
-      group('more', third),
-    ]);
-  });
-
-  it('appends to an empty list', () => {
-    expect(appendGroups([], [group('more', first, second)])).toEqual([group('more', first, second)]);
-  });
-
-  it('drops the articles with the URL, or the title and source, of one already in the list', () => {
-    const sameUrl = makeArticle('Updated first', 'https://example.com/1');
-    const otherEdition = makeArticle('  FIRST ', 'https://example.com/regional/1', 'ansa.it');
-    const otherSource = makeArticle('First', 'https://example.com/other/1', 'la Repubblica');
-
-    expect(
-      appendGroups([group('top', first), group('more', second)], [group('more', sameUrl, otherEdition, otherSource, third)])
-    ).toEqual([group('top', first), group('more', second, otherSource, third)]);
-  });
-
-  it('keeps only the first of the duplicates inside the new page, also across its groups', () => {
-    const thirdAgain = makeArticle('Third, updated', 'https://example.com/3');
-    const thirdOtherEdition = makeArticle('third', 'https://example.com/regional/3');
-
-    expect(
-      appendGroups([group('top', first)], [group('more', third, thirdAgain), group('other', thirdOtherEdition, fourth)])
-    ).toEqual([group('top', first), group('more', third), group('other', fourth)]);
-  });
-
-  it('returns the current list itself when it adds nothing', () => {
-    const current = [group('top', first, second)];
-    const duplicates = group(
-      'more',
-      makeArticle('Updated first', 'https://example.com/1'),
-      makeArticle('SECOND', 'https://example.com/regional/2')
-    );
-
-    expect(appendGroups(current, [])).toBe(current);
-    expect(appendGroups(current, [group('more')])).toBe(current);
-    expect(appendGroups(current, [duplicates])).toBe(current);
-    expect(appendGroups(current, [group('more', third)])).not.toBe(current);
-  });
-
-  it('drops an article with the title and source of one in the list only when published on the same day', () => {
-    const daily = makeDatedArticle('Daily report', 'https://example.com/daily/23', '2026-09-23T07:00:00Z');
-    const sameDay = makeDatedArticle('Daily report', 'https://example.com/regional/daily/23', '2026-09-23T18:00:00Z');
-    const nextDay = makeDatedArticle('Daily report', 'https://example.com/daily/24', '2026-09-24T07:00:00Z');
-    const current = [group('top', first, daily)];
-
-    expect(appendGroups(current, [group('more', sameDay)])).toBe(current);
-    expect(appendGroups(current, [group('more', sameDay, nextDay)])).toEqual([
-      group('top', first, daily),
-      group('more', nextDay),
-    ]);
-  });
 
   it('drops the second ANSA editions of a later page, as mapGroups does within one page', () => {
     const firstPage = mapGroups([
@@ -792,7 +708,7 @@ describe('appendGroups', () => {
     const firstPage = mapGroups([{ key: 'topHeadlines', articles: usaSection }]);
     const morePage = mapGroups([{ key: 'moreNews', articles: everythingUs.articles }]);
     const appended = appendGroups(firstPage, morePage);
-    const nextPage = [group('moreNews', makeArticle('Another story', 'https://example.com/another', 'CNN'))];
+    const nextPage = [{ key: 'moreNews', articles: [makeArticle('Another story', 'https://example.com/another', 'CNN')] }];
     const extended = appendGroups(appended, nextPage);
 
     expect(appended.map((group) => [group.key, group.articles.length])).toEqual([

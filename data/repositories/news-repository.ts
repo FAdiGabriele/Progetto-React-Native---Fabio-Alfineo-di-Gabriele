@@ -1,30 +1,27 @@
 import { NEWS_MAX_RESULTS } from '@/constants/config';
-import { NEWS_SECTIONS, type NewsGroupKey, type NewsSectionKey } from '@/constants/news-sections';
-import { mapGroups } from '@/repositories/news-mapper';
+import { mapGroups } from '@/data/repositories/news-mapper';
+import { NEWS_SECTION_REQUESTS, type NewsSectionRequests } from '@/data/repositories/news-section-requests';
+import type { NewsApiArticleDto, NewsApiPageDto, NewsApiRequestDto } from '@/data/services/news-api-dto';
+import { getArticles, NewsApiServiceError } from '@/data/services/news-api-service';
+import { readEntry, writeEntry } from '@/data/services/news-cache-service';
 import {
   NewsError,
   type NewsErrorKind,
   type NewsPage,
   type NewsPageCursor,
+  type NewsSectionKey,
   type SavedNews,
-} from '@/repositories/news-model';
-import type { NewsApiArticleDto, NewsApiPageDto, NewsApiRequestDto } from '@/services/news-api-dto';
-import { getArticles, NewsApiServiceError } from '@/services/news-api-service';
-import { readEntry, writeEntry } from '@/services/news-cache-service';
+} from '@/domain/models/news-model';
+import type { NewsRepository } from '@/domain/repositories/news-repository';
 import { parseIsoDate } from '@/utils/date';
-
-type NewsSection = (typeof NEWS_SECTIONS)[number];
-
-type SectionPage = NewsPage<NewsGroupKey>;
 
 const FIRST_PAGE = 1;
 
-function getSection(sectionKey: NewsSectionKey): NewsSection {
-  const section = NEWS_SECTIONS.find((candidate) => candidate.key === sectionKey);
-  if (section === undefined) {
+function getSectionRequests(sectionKey: NewsSectionKey): NewsSectionRequests {
+  if (!Object.prototype.hasOwnProperty.call(NEWS_SECTION_REQUESTS, sectionKey)) {
     throw new Error(`Unknown news section: ${sectionKey}`);
   }
-  return section;
+  return NEWS_SECTION_REQUESTS[sectionKey];
 }
 
 // The NewsAPI codes that say more than the HTTP status they come with.
@@ -104,7 +101,7 @@ function hasMorePages(page: number, pageSize: number, totalResults: number): boo
 }
 
 // The groups of the first page of a section: one per request, with its article DTOs.
-function toFirstPageGroups(section: NewsSection, requestArticles: readonly NewsApiArticleDto[][]) {
+function toFirstPageGroups(section: NewsSectionRequests, requestArticles: readonly NewsApiArticleDto[][]) {
   return mapGroups(
     section.requests.map(({ group }, index) => ({ key: group, articles: requestArticles[index] }))
   );
@@ -118,7 +115,8 @@ async function saveEntry(sectionKey: string, requests: NewsApiArticleDto[][]): P
   }
 }
 
-async function getFirstPage(section: NewsSection, signal?: AbortSignal): Promise<SectionPage> {
+async function getFirstPage(sectionKey: NewsSectionKey, signal?: AbortSignal): Promise<NewsPage> {
+  const section = getSectionRequests(sectionKey);
   const results = await Promise.allSettled(
     section.requests.map(({ request }) => getArticles(request, signal))
   );
@@ -141,20 +139,20 @@ async function getFirstPage(section: NewsSection, signal?: AbortSignal): Promise
   const groups = toFirstPageGroups(section, requestArticles);
   // A partial page does not replace the complete list saved by an earlier load.
   if (groups.length > 0 && partialError === undefined) {
-    await saveEntry(section.key, requestArticles);
+    await saveEntry(sectionKey, requestArticles);
   }
 
-  const page: SectionPage =
+  const page: NewsPage =
     section.moreRequest === undefined ? { groups } : { groups, next: { page: FIRST_PAGE } };
   return partialError === undefined ? page : { ...page, partialError };
 }
 
 async function getMorePage(
-  section: NewsSection,
+  sectionKey: NewsSectionKey,
   cursor: NewsPageCursor,
   signal?: AbortSignal
-): Promise<SectionPage> {
-  const more = section.moreRequest;
+): Promise<NewsPage> {
+  const more = getSectionRequests(sectionKey).moreRequest;
   if (more === undefined) {
     return { groups: [] };
   }
@@ -187,13 +185,14 @@ async function getMorePage(
  * failed request rejects with its NewsError, so a later call can retry the same page. A
  * cancellation requested through `signal` is rethrown unchanged.
  */
-export async function getSectionArticles(
+async function getSectionArticles(
   sectionKey: NewsSectionKey,
   signal?: AbortSignal,
   cursor?: NewsPageCursor
-): Promise<SectionPage> {
-  const section = getSection(sectionKey);
-  return cursor === undefined ? getFirstPage(section, signal) : getMorePage(section, cursor, signal);
+): Promise<NewsPage> {
+  return cursor === undefined
+    ? getFirstPage(sectionKey, signal)
+    : getMorePage(sectionKey, cursor, signal);
 }
 
 /**
@@ -201,10 +200,8 @@ export async function getSectionArticles(
  * when there is none, its instant cannot be parsed, it was saved with a different list of
  * requests or no article survives the mapping.
  */
-export async function getSavedSectionArticles(
-  sectionKey: NewsSectionKey
-): Promise<SavedNews<NewsGroupKey> | null> {
-  const section = getSection(sectionKey);
+async function getSavedSectionArticles(sectionKey: NewsSectionKey): Promise<SavedNews | null> {
+  const section = getSectionRequests(sectionKey);
   const entry = await readEntry(sectionKey);
   if (entry === null) {
     return null;
@@ -216,3 +213,6 @@ export async function getSavedSectionArticles(
   const groups = toFirstPageGroups(section, entry.requests);
   return groups.length > 0 ? { groups, savedAt } : null;
 }
+
+/** The news of the sections from NewsAPI, with the last list of each section saved on the device. */
+export const newsRepository: NewsRepository = { getSectionArticles, getSavedSectionArticles };

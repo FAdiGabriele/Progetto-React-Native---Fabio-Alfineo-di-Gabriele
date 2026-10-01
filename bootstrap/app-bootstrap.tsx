@@ -1,11 +1,10 @@
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState, type ReactNode } from 'react';
 
+import { languageRepository, themeRepository } from '@/container';
+import type { Language } from '@/domain/models/language-model';
+import type { Theme } from '@/domain/models/theme-model';
 import { I18nProvider } from '@/i18n/i18n-provider';
-import type { Language } from '@/repositories/language-model';
-import { getSavedLanguage } from '@/repositories/language-repository';
-import type { Theme } from '@/repositories/theme-model';
-import { getSavedTheme } from '@/repositories/theme-repository';
 import { ThemePreferenceProvider } from '@/theme/theme-preference-provider';
 
 type SavedPreferences = { theme: Theme | null; language: Language | null };
@@ -16,8 +15,8 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 // The two reads start together; a read that fails counts as nothing saved.
 async function readSavedPreferences(): Promise<SavedPreferences> {
   const [theme, language] = await Promise.all([
-    getSavedTheme().catch(() => null),
-    getSavedLanguage().catch(() => null),
+    themeRepository.getSavedTheme().catch(() => null),
+    languageRepository.getSavedLanguage().catch(() => null),
   ]);
   return { theme, language };
 }

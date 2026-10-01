@@ -1,9 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Appearance, Platform } from 'react-native';
 
+import { themeRepository } from '@/container';
+import type { Theme } from '@/domain/models/theme-model';
 import { ColorSchemeContext } from '@/hooks/use-color-scheme';
-import type { Theme } from '@/repositories/theme-model';
-import { saveTheme } from '@/repositories/theme-repository';
 
 export type ThemePreference = {
   theme: Theme;
@@ -45,7 +45,7 @@ export function ThemePreferenceProvider({
       toggleTheme: () => {
         const next = OTHER_THEME[theme];
         setTheme(next);
-        saveTheme(next).catch(() => {});
+        themeRepository.saveTheme(next).catch(() => {});
       },
     }),
     [theme]

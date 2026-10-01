@@ -1,4 +1,4 @@
-/** Data as NewsAPI sends and receives it: these types never leave the service and repository layers. */
+/** Data as NewsAPI sends and receives it: these types never leave the data layer. */
 
 export type NewsApiArticleDto = {
   source: { id: string | null; name: string };

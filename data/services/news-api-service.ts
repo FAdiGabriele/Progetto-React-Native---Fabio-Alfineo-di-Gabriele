@@ -10,8 +10,8 @@ import type {
   NewsApiPageDto,
   NewsApiRequestDto,
   NewsApiResponseDto,
-} from '@/services/news-api-dto';
-import { getFixturePage } from '@/services/news-fixture-service';
+} from '@/data/services/news-api-dto';
+import { getFixturePage } from '@/data/services/news-fixture-service';
 
 export type NewsApiServiceErrorReason =
   | 'missingKey'
@@ -194,7 +194,7 @@ function parseResponse({ status, ok, body }: RawResponse): NewsApiPageDto {
  * A request that fails on the network is sent once more, after a pause. Rejects with a
  * NewsApiServiceError, or with an abort error when the caller aborts `signal`: the one of
  * fetch, unchanged, or one like it during the pause before the retry. In fixture mode the
- * page comes from `services/fixtures/`, without any request and without checking the key.
+ * page comes from `data/services/fixtures/`, without any request and without checking the key.
  */
 export async function getArticles(
   request: NewsApiRequestDto,

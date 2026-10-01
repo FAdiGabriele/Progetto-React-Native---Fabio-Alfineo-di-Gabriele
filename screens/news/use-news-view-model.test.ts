@@ -1,24 +1,27 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
-import { openBrowserAsync, WebBrowserResultType, type WebBrowserResult } from 'expo-web-browser';
-import { Linking } from 'react-native';
 
-import type { NewsGroupKey } from '@/constants/news-sections';
-import { NewsError, type Article, type NewsErrorKind, type NewsPage, type SavedNews } from '@/repositories/news-model';
+import {
+  NewsError,
+  type Article,
+  type NewsErrorKind,
+  type NewsGroup,
+  type NewsPage,
+  type NewsPageCursor,
+  type SavedNews,
+} from '@/domain/models/news-model';
 import {
   INITIAL_NEWS_STATE,
   reduceNewsState,
   useNewsViewModel,
   type NewsAction,
-  type NewsSectionGroup,
   type NewsState,
+  type NewsUseCases,
 } from '@/screens/news/use-news-view-model';
 
-jest.mock('@/repositories/news-repository', () => ({
-  getSectionArticles: jest.fn(),
-  getSavedSectionArticles: jest.fn(),
+// Keeps the data layer out of the tests; the hook receives fake use cases instead.
+jest.mock('@/container', () => ({
+  newsUseCases: { loadSectionNews: jest.fn(), loadMoreNews: jest.fn(), openArticle: jest.fn() },
 }));
-
-jest.mock('expo-web-browser', () => ({ ...jest.requireActual('expo-web-browser'), openBrowserAsync: jest.fn() }));
 
 // The Italian dictionary, without the provider: the tests read the texts the screen would show.
 jest.mock('@/i18n/i18n-provider', () => {
@@ -32,14 +35,11 @@ jest.mock('@/i18n/i18n-provider', () => {
   };
 });
 
-type Repository = typeof import('@/repositories/news-repository');
-const repository = jest.requireMock<Repository>('@/repositories/news-repository');
-const getSectionArticles = repository.getSectionArticles as jest.MockedFunction<Repository['getSectionArticles']>;
-const getSavedSectionArticles = repository.getSavedSectionArticles as jest.MockedFunction<
-  Repository['getSavedSectionArticles']
->;
-const openBrowser = openBrowserAsync as jest.MockedFunction<typeof openBrowserAsync>;
-const openUrl = Linking.openURL as jest.MockedFunction<typeof Linking.openURL>;
+type LoadSectionNewsRequest = Parameters<NewsUseCases['loadSectionNews']>[0];
+type LoadSectionNewsResult = Awaited<ReturnType<NewsUseCases['loadSectionNews']>>;
+type LoadMoreNewsRequest = Parameters<NewsUseCases['loadMoreNews']>[0];
+type LoadMoreNewsResult = Awaited<ReturnType<NewsUseCases['loadMoreNews']>>;
+type OpenArticleOutcome = Awaited<ReturnType<NewsUseCases['openArticle']>>;
 
 function makeArticle(slug: string, sourceName = 'ANSA.it'): Article {
   const url = `https://example.com/${slug}`;
@@ -51,9 +51,9 @@ const second = makeArticle('second');
 const third = makeArticle('third');
 const fourth = makeArticle('fourth');
 
-const FRONT_PAGES: NewsSectionGroup = { key: 'frontPages', articles: [first, second] };
-const LATEST_ANSA: NewsSectionGroup = { key: 'latestAnsa', articles: [third] };
-const MORE_NEWS: NewsSectionGroup = { key: 'moreNews', articles: [fourth] };
+const FRONT_PAGES: NewsGroup = { key: 'frontPages', articles: [first, second] };
+const LATEST_ANSA: NewsGroup = { key: 'latestAnsa', articles: [third] };
+const MORE_NEWS: NewsGroup = { key: 'moreNews', articles: [fourth] };
 
 const RECEIVED_AT = new Date('2026-09-30T10:00:00Z');
 const SAVED_AT = new Date('2026-09-29T08:00:00Z');
@@ -86,7 +86,10 @@ const savedState = (error: NewsError): NewsState =>
   ]);
 
 const failedPageState = (): NewsState =>
-  reduceAll([{ type: 'loadMoreStarted' }, { type: 'loadMoreFailed', error: new NewsError('network') }], loadedState());
+  reduceAll(
+    [{ type: 'loadMoreStarted' }, { type: 'loadMoreFailed', error: new NewsError('network'), cursor: { page: 1 } }],
+    loadedState()
+  );
 
 describe('INITIAL_NEWS_STATE', () => {
   it('starts idle on the first section, without articles, error, notice, instant, cursor or failed page', () => {
@@ -307,65 +310,84 @@ describe('reduceNewsState on more news', () => {
     expect(state.notice).not.toBeNull();
   });
 
-  it('appends the group of a page after the list, moves the cursor to the next page and hides the notice', () => {
+  it('takes the whole list of a page in place of the current one, moves the cursor and hides the notice', () => {
+    const groups = [FRONT_PAGES, MORE_NEWS];
     const state = reduceAll(
-      [{ type: 'loadMoreStarted' }, { type: 'loadMoreSucceeded', groups: [MORE_NEWS], cursor: { page: 2 } }],
+      [{ type: 'loadMoreStarted' }, { type: 'loadMoreSucceeded', groups, cursor: { page: 2 } }],
       partialState(new NewsError('network'))
     );
 
     expect(state.status).toBe('success');
-    expect(state.groups).toEqual([FRONT_PAGES, MORE_NEWS]);
+    expect(state.groups).toBe(groups);
     expect(state.cursor).toEqual({ page: 2 });
     expect(state.updatedAt).toBe(RECEIVED_AT);
     expect(state.error).toBeNull();
     expect(state.notice).toBeNull();
   });
 
-  it('extends the last group with the next page of the same key and drops the cursor of an exhausted request', () => {
+  it('drops the cursor after the last page', () => {
     const fifth = makeArticle('fifth');
     const withMore = reduceAll(
-      [{ type: 'loadMoreStarted' }, { type: 'loadMoreSucceeded', groups: [MORE_NEWS], cursor: { page: 2 } }],
+      [
+        { type: 'loadMoreStarted' },
+        { type: 'loadMoreSucceeded', groups: [FRONT_PAGES, LATEST_ANSA, MORE_NEWS], cursor: { page: 2 } },
+      ],
       loadedState()
     );
-    const state = reduceAll(
-      [{ type: 'loadMoreStarted' }, { type: 'loadMoreSucceeded', groups: [{ key: 'moreNews', articles: [fifth] }] }],
-      withMore
-    );
+    const lastGroups = [FRONT_PAGES, LATEST_ANSA, { key: 'moreNews' as const, articles: [fourth, fifth] }];
+    const state = reduceAll([{ type: 'loadMoreStarted' }, { type: 'loadMoreSucceeded', groups: lastGroups }], withMore);
 
-    expect(state.groups).toEqual([FRONT_PAGES, LATEST_ANSA, { key: 'moreNews', articles: [fourth, fifth] }]);
+    expect(withMore.cursor).toEqual({ page: 2 });
+    expect(state.groups).toBe(lastGroups);
     expect(state.cursor).toBeUndefined();
+    expect(state.status).toBe('success');
   });
 
-  it('drops the articles of a page that are already in the list and keeps the same list when nothing is added', () => {
+  it('keeps the same list when the page added nothing and moves the cursor', () => {
     const loaded = loadedState();
-    const duplicates: NewsSectionGroup = {
-      key: 'moreNews',
-      articles: [makeArticle('first'), { ...makeArticle('regional/third'), title: 'Title third' }],
-    };
     const state = reduceAll(
-      [{ type: 'loadMoreStarted' }, { type: 'loadMoreSucceeded', groups: [duplicates], cursor: { page: 2 } }],
+      [{ type: 'loadMoreStarted' }, { type: 'loadMoreSucceeded', groups: loaded.groups, cursor: { page: 2 } }],
       loaded
     );
 
     expect(state.groups).toBe(loaded.groups);
     expect(state.cursor).toEqual({ page: 2 });
+    expect(state.status).toBe('success');
   });
 
-  it('keeps the list and the cursor when a page fails and reports the error as notice', () => {
+  it('keeps the list when a page fails, with the cursor of that page, and reports the error as notice', () => {
     const error = new NewsError('rateLimit');
-    const state = reduceAll([{ type: 'loadMoreStarted' }, { type: 'loadMoreFailed', error }], loadedState());
+    const loaded = loadedState();
+    const state = reduceAll([{ type: 'loadMoreStarted' }, { type: 'loadMoreFailed', error, cursor: { page: 1 } }], loaded);
 
     expect(state.status).toBe('error');
     expect(state.error).toBe(error);
-    expect(state.groups).toEqual([FRONT_PAGES, LATEST_ANSA]);
+    expect(state.groups).toBe(loaded.groups);
     expect(state.cursor).toEqual({ page: 1 });
     expect(state.notice).toEqual({ kind: 'loadFailed', error, partial: false });
   });
 
+  it('takes the cursor of the page that failed, to retry that page, even when it is not the current one', () => {
+    const error = new NewsError('timeout');
+    const state = reduceAll(
+      [{ type: 'loadMoreStarted' }, { type: 'loadMoreFailed', error, cursor: { page: 3 } }],
+      loadedState()
+    );
+
+    expect(state.status).toBe('error');
+    expect(state.error).toBe(error);
+    expect(state.groups).toEqual([FRONT_PAGES, LATEST_ANSA]);
+    expect(state.cursor).toEqual({ page: 3 });
+    expect(state.loadMoreFailed).toBe(true);
+  });
+
   it('clears a previous error when a page starts and after a page succeeds', () => {
-    const failed = reduceAll([{ type: 'loadMoreStarted' }, { type: 'loadMoreFailed', error: new NewsError('network') }], loadedState());
-    const started = reduceNewsState(failed, { type: 'loadMoreStarted' });
-    const succeeded = reduceNewsState(started, { type: 'loadMoreSucceeded', groups: [MORE_NEWS], cursor: { page: 2 } });
+    const started = reduceNewsState(failedPageState(), { type: 'loadMoreStarted' });
+    const succeeded = reduceNewsState(started, {
+      type: 'loadMoreSucceeded',
+      groups: [FRONT_PAGES, LATEST_ANSA, MORE_NEWS],
+      cursor: { page: 2 },
+    });
 
     expect(started.error).toBeNull();
     expect(started.notice).not.toBeNull();
@@ -380,7 +402,10 @@ describe('reduceNewsState on more news', () => {
       loadedState()
     );
     const state = reduceAll(
-      [{ type: 'loadMoreStarted' }, { type: 'loadMoreSucceeded', groups: [MORE_NEWS], cursor: { page: 2 } }],
+      [
+        { type: 'loadMoreStarted' },
+        { type: 'loadMoreSucceeded', groups: [FRONT_PAGES, LATEST_ANSA, MORE_NEWS], cursor: { page: 2 } },
+      ],
       afterFailedRefresh
     );
 
@@ -391,35 +416,6 @@ describe('reduceNewsState on more news', () => {
 
   it('never gives the saved list a cursor', () => {
     expect(savedState(new NewsError('network')).cursor).toBeUndefined();
-  });
-
-  it('moves only the cursor when a page adds nothing and keeps loading more', () => {
-    const loadingMore = reduceNewsState(partialState(new NewsError('network')), { type: 'loadMoreStarted' });
-    const state = reduceNewsState(loadingMore, { type: 'loadMoreSkipped', cursor: { page: 2 } });
-
-    expect(state).toEqual({ ...loadingMore, cursor: { page: 2 } });
-    expect(state.status).toBe('loadingMore');
-    expect(state.groups).toBe(loadingMore.groups);
-    expect(state.notice).toBe(loadingMore.notice);
-    expect(state.updatedAt).toBe(RECEIVED_AT);
-  });
-
-  it('keeps the cursor of the page that fails after a skipped one, to retry that page', () => {
-    const error = new NewsError('timeout');
-    const state = reduceAll(
-      [
-        { type: 'loadMoreStarted' },
-        { type: 'loadMoreSkipped', cursor: { page: 2 } },
-        { type: 'loadMoreFailed', error },
-      ],
-      loadedState()
-    );
-
-    expect(state.status).toBe('error');
-    expect(state.error).toBe(error);
-    expect(state.groups).toEqual([FRONT_PAGES, LATEST_ANSA]);
-    expect(state.cursor).toEqual({ page: 2 });
-    expect(state.loadMoreFailed).toBe(true);
   });
 });
 
@@ -479,7 +475,7 @@ describe('reduceNewsState on a failed page of more news', () => {
         receivedAt: RECEIVED_AT,
       },
       { type: 'loadMoreStarted' },
-      { type: 'loadMoreFailed', error: new NewsError('network') },
+      { type: 'loadMoreFailed', error: new NewsError('network'), cursor: { page: 1 } },
     ]);
     const state = reduceNewsState(emptyPageFailed, { type: 'loadStarted' });
 
@@ -538,15 +534,11 @@ describe('reduceNewsState on the notice', () => {
   it('replaces the opening notice with the error of a page that fails', () => {
     const error = new NewsError('network');
     const noticed = reduceNewsState(loadedState(), { type: 'openArticleFailed' });
-    const state = reduceAll([{ type: 'loadMoreStarted' }, { type: 'loadMoreFailed', error }], noticed);
+    const state = reduceAll([{ type: 'loadMoreStarted' }, { type: 'loadMoreFailed', error, cursor: { page: 1 } }], noticed);
 
     expect(state.notice).toEqual({ kind: 'loadFailed', error, partial: false });
   });
 });
-
-type SectionPage = NewsPage<NewsGroupKey>;
-
-const DISMISSED: WebBrowserResult = { type: WebBrowserResultType.DISMISS };
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -558,7 +550,19 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-const FIRST_PAGE: SectionPage = { groups: [FRONT_PAGES, LATEST_ANSA], next: { page: 1 } };
+function createAbortError(): Error {
+  const error = new Error('The operation was aborted.');
+  error.name = 'AbortError';
+  return error;
+}
+
+const loadSectionNews = jest.fn<Promise<LoadSectionNewsResult>, [LoadSectionNewsRequest]>();
+const loadMoreNews = jest.fn<Promise<LoadMoreNewsResult>, [LoadMoreNewsRequest]>();
+const openArticle = jest.fn<Promise<OpenArticleOutcome>, [Article]>();
+const USE_CASES: NewsUseCases = { loadSectionNews, loadMoreNews, openArticle };
+const containerUseCases = jest.requireMock<{ newsUseCases: jest.Mocked<NewsUseCases> }>('@/container').newsUseCases;
+
+const FIRST_PAGE: NewsPage = { groups: [FRONT_PAGES, LATEST_ANSA], next: { page: 1 } };
 const NETWORK_MESSAGE = 'Connessione assente. Controlla la rete e riprova.';
 
 const LIMIT_ERRORS: { kind: NewsErrorKind; message: string }[] = [
@@ -566,45 +570,57 @@ const LIMIT_ERRORS: { kind: NewsErrorKind; message: string }[] = [
   { kind: 'resultsLimit', message: 'Raggiunto il limite di notizie disponibili per questa categoria.' },
 ];
 
-// Articles of the first page again: one by URL, one by title, source and day.
-const DUPLICATES: NewsSectionGroup = {
-  key: 'moreNews',
-  articles: [first, { ...makeArticle('regional/third'), title: 'Title third' }],
-};
+const loaded = (page: NewsPage): LoadSectionNewsResult => ({ ok: true, page });
+
+const failed = (kind: NewsErrorKind, saved: SavedNews | null = null): LoadSectionNewsResult => ({
+  ok: false,
+  error: new NewsError(kind),
+  saved,
+});
+
+const appended = (groups: NewsGroup[], cursor?: NewsPageCursor): LoadMoreNewsResult => ({ ok: true, groups, cursor });
+
+const pageFailed = (kind: NewsErrorKind, cursor: NewsPageCursor): LoadMoreNewsResult => ({
+  ok: false,
+  error: new NewsError(kind),
+  cursor,
+});
+
+const sectionRequest = (index: number): LoadSectionNewsRequest => loadSectionNews.mock.calls[index][0];
+const moreRequest = (index: number): LoadMoreNewsRequest => loadMoreNews.mock.calls[index][0];
+const pending = <T>() => new Promise<T>(() => {});
 
 describe('useNewsViewModel', () => {
   beforeEach(() => {
-    getSectionArticles.mockReset();
-    getSavedSectionArticles.mockReset();
-    getSavedSectionArticles.mockResolvedValue(null);
-    openBrowser.mockReset();
-    openBrowser.mockResolvedValue(DISMISSED);
-    openUrl.mockReset();
-    openUrl.mockResolvedValue(true);
+    jest.resetAllMocks();
+    for (const useCases of [USE_CASES, containerUseCases]) {
+      jest.mocked(useCases.loadSectionNews).mockImplementation(pending);
+      jest.mocked(useCases.loadMoreNews).mockImplementation(pending);
+      jest.mocked(useCases.openArticle).mockResolvedValue('opened');
+    }
   });
 
-  async function renderLoaded(page: SectionPage = FIRST_PAGE) {
-    getSectionArticles.mockResolvedValueOnce(page);
-    const rendered = await renderHook(() => useNewsViewModel());
+  async function renderLoaded(page: NewsPage = FIRST_PAGE) {
+    loadSectionNews.mockResolvedValueOnce(loaded(page));
+    const rendered = await renderHook(() => useNewsViewModel(USE_CASES));
     await waitFor(() => expect(rendered.result.current.status).toBe('success'));
     return rendered;
   }
 
-  it('loads the first section at start and exposes the list ready to render', async () => {
-    const load = deferred<SectionPage>();
-    getSectionArticles.mockReturnValueOnce(load.promise);
+  it('loads the first section at start, without articles on screen, and exposes the list ready to render', async () => {
+    const load = deferred<LoadSectionNewsResult>();
+    loadSectionNews.mockReturnValueOnce(load.promise);
 
-    const { result } = await renderHook(() => useNewsViewModel());
+    const { result } = await renderHook(() => useNewsViewModel(USE_CASES));
 
     expect(result.current.status).toBe('loading');
     expect(result.current.groups).toEqual([]);
     expect(result.current.updatedAtLabel).toBeUndefined();
-    expect(getSectionArticles).toHaveBeenCalledTimes(1);
-    expect(getSectionArticles.mock.calls[0][0]).toBe('italy');
-    expect(getSectionArticles.mock.calls[0][1]).toBeInstanceOf(AbortSignal);
-    expect(getSectionArticles.mock.calls[0][2]).toBeUndefined();
+    expect(loadSectionNews).toHaveBeenCalledTimes(1);
+    expect(sectionRequest(0)).toEqual({ section: 'italy', hasArticles: false, signal: expect.any(AbortSignal) });
+    expect(sectionRequest(0).signal?.aborted).toBe(false);
 
-    await act(async () => load.resolve(FIRST_PAGE));
+    await act(async () => load.resolve(loaded(FIRST_PAGE)));
 
     const { current } = result;
     expect(current.status).toBe('success');
@@ -632,16 +648,19 @@ describe('useNewsViewModel', () => {
     expect(current.errorMessage).toBeNull();
     expect(current.notice).toBeNull();
     expect(current.hasMore).toBe(true);
+    expect(loadMoreNews).not.toHaveBeenCalled();
   });
 
   it('keeps the same card groups between renders that change nothing', async () => {
     const { result, rerender } = await renderLoaded();
     const groups = result.current.groups;
+    const sectionOptions = result.current.sectionOptions;
 
     await rerender(undefined);
 
     expect(result.current.groups).toBe(groups);
-    expect(result.current.sectionOptions).toBe(result.current.sectionOptions);
+    expect(result.current.sectionOptions).toBe(sectionOptions);
+    expect(loadSectionNews).toHaveBeenCalledTimes(1);
   });
 
   it('reports a partial first page with the notice and the error message, and hides the notice when dismissed', async () => {
@@ -662,13 +681,12 @@ describe('useNewsViewModel', () => {
     expect(result.current.errorMessage).toBe(NETWORK_MESSAGE);
   });
 
-  it('enters the error state with the message when the first page fails and nothing is saved', async () => {
-    getSectionArticles.mockRejectedValueOnce(new NewsError('timeout'));
+  it('enters the error state with the message when the first page fails without a saved list', async () => {
+    loadSectionNews.mockResolvedValueOnce(failed('timeout'));
 
-    const { result } = await renderHook(() => useNewsViewModel());
+    const { result } = await renderHook(() => useNewsViewModel(USE_CASES));
     await waitFor(() => expect(result.current.status).toBe('error'));
 
-    expect(getSavedSectionArticles).toHaveBeenCalledWith('italy');
     expect(result.current.groups).toEqual([]);
     expect(result.current.errorMessage).toBe('Il server non risponde. Riprova.');
     expect(result.current.notice).toBeNull();
@@ -677,11 +695,11 @@ describe('useNewsViewModel', () => {
   });
 
   it.each(LIMIT_ERRORS)(
-    'shows the $kind message in the error state when the first page fails and nothing is saved',
+    'shows the $kind message in the error state when the first page fails without a saved list',
     async ({ kind, message }) => {
-      getSectionArticles.mockRejectedValueOnce(new NewsError(kind));
+      loadSectionNews.mockResolvedValueOnce(failed(kind));
 
-      const { result } = await renderHook(() => useNewsViewModel());
+      const { result } = await renderHook(() => useNewsViewModel(USE_CASES));
       await waitFor(() => expect(result.current.status).toBe('error'));
 
       expect(result.current.errorMessage).toBe(message);
@@ -697,7 +715,7 @@ describe('useNewsViewModel', () => {
       expect(result.current.notice).toBe(`Alcune notizie non sono state caricate. ${message}`);
       expect(result.current.errorMessage).toBe(message);
 
-      getSectionArticles.mockRejectedValueOnce(new NewsError(kind));
+      loadMoreNews.mockResolvedValueOnce(pageFailed(kind, { page: 1 }));
       await act(async () => result.current.loadMore());
       await waitFor(() => expect(result.current.status).toBe('error'));
 
@@ -707,21 +725,19 @@ describe('useNewsViewModel', () => {
     }
   );
 
-  it('translates an unexpected rejection as an unknown error', async () => {
-    getSectionArticles.mockRejectedValueOnce(new Error('boom'));
+  it('shows the message of an unknown error', async () => {
+    loadSectionNews.mockResolvedValueOnce(failed('unknown'));
 
-    const { result } = await renderHook(() => useNewsViewModel());
+    const { result } = await renderHook(() => useNewsViewModel(USE_CASES));
     await waitFor(() => expect(result.current.status).toBe('error'));
 
     expect(result.current.errorMessage).toBe('Si è verificato un errore imprevisto.');
   });
 
-  it('shows the saved list with its save instant and the error as notice when the first page fails', async () => {
-    const saved: SavedNews<NewsGroupKey> = { groups: [FRONT_PAGES, LATEST_ANSA], savedAt: SAVED_AT };
-    getSectionArticles.mockRejectedValueOnce(new NewsError('network'));
-    getSavedSectionArticles.mockResolvedValueOnce(saved);
+  it('shows the saved list that comes with the error, with its save instant and the error as notice', async () => {
+    loadSectionNews.mockResolvedValueOnce(failed('network', { groups: [FRONT_PAGES, LATEST_ANSA], savedAt: SAVED_AT }));
 
-    const { result } = await renderHook(() => useNewsViewModel());
+    const { result } = await renderHook(() => useNewsViewModel(USE_CASES));
     await waitFor(() => expect(result.current.status).toBe('error'));
 
     expect(result.current.groups.map((group) => group.title)).toEqual(['Prime pagine', 'Ultime da ANSA']);
@@ -731,22 +747,23 @@ describe('useNewsViewModel', () => {
     expect(result.current.hasMore).toBe(false);
   });
 
-  it('refreshes the selected section keeping the list on screen and ignores a second refresh meanwhile', async () => {
+  it('refreshes the selected section with the articles on screen, keeping them, and ignores a second refresh meanwhile', async () => {
     const { result } = await renderLoaded();
-    const refresh = deferred<SectionPage>();
-    getSectionArticles.mockReturnValueOnce(refresh.promise);
+    const refresh = deferred<LoadSectionNewsResult>();
+    loadSectionNews.mockReturnValueOnce(refresh.promise);
 
     await act(async () => result.current.refresh());
 
     expect(result.current.status).toBe('refreshing');
     expect(result.current.groups).toHaveLength(2);
-    expect(getSectionArticles).toHaveBeenCalledTimes(2);
+    expect(loadSectionNews).toHaveBeenCalledTimes(2);
+    expect(sectionRequest(1)).toEqual({ section: 'italy', hasArticles: true, signal: expect.any(AbortSignal) });
 
     await act(async () => result.current.refresh());
 
-    expect(getSectionArticles).toHaveBeenCalledTimes(2);
+    expect(loadSectionNews).toHaveBeenCalledTimes(2);
 
-    await act(async () => refresh.resolve({ groups: [LATEST_ANSA], next: { page: 1 } }));
+    await act(async () => refresh.resolve(loaded({ groups: [LATEST_ANSA], next: { page: 1 } })));
 
     expect(result.current.status).toBe('success');
     expect(result.current.groups.map((group) => group.key)).toEqual(['latestAnsa']);
@@ -754,7 +771,7 @@ describe('useNewsViewModel', () => {
 
   it('keeps the list and the cursor after a failed refresh, reports it as notice and still loads the next page', async () => {
     const { result } = await renderLoaded();
-    getSectionArticles.mockRejectedValueOnce(new NewsError('network'));
+    loadSectionNews.mockResolvedValueOnce(failed('network'));
 
     await act(async () => result.current.refresh());
     await waitFor(() => expect(result.current.status).toBe('error'));
@@ -762,26 +779,33 @@ describe('useNewsViewModel', () => {
     expect(result.current.groups).toHaveLength(2);
     expect(result.current.notice).toBe(NETWORK_MESSAGE);
     expect(result.current.hasMore).toBe(true);
-    expect(getSavedSectionArticles).not.toHaveBeenCalled();
 
-    getSectionArticles.mockResolvedValueOnce({ groups: [MORE_NEWS], next: { page: 2 } });
+    loadMoreNews.mockResolvedValueOnce(appended([FRONT_PAGES, LATEST_ANSA, MORE_NEWS], { page: 2 }));
     await act(async () => result.current.loadMore());
     await waitFor(() => expect(result.current.status).toBe('success'));
 
-    expect(getSectionArticles).toHaveBeenLastCalledWith('italy', expect.any(AbortSignal), { page: 1 });
+    expect(loadMoreNews).toHaveBeenCalledTimes(1);
+    expect(moreRequest(0)).toEqual({
+      section: 'italy',
+      groups: [FRONT_PAGES, LATEST_ANSA],
+      cursor: { page: 1 },
+      signal: expect.any(AbortSignal),
+    });
+    expect(moreRequest(0).groups).toBe(FIRST_PAGE.groups);
     expect(result.current.groups.map((group) => [group.key, group.title])).toEqual([
       ['frontPages', 'Prime pagine'],
       ['latestAnsa', 'Ultime da ANSA'],
       ['moreNews', 'Altre notizie'],
     ]);
     expect(result.current.notice).toBeNull();
+    expect(result.current.hasMore).toBe(true);
   });
 
-  it('changes section: drops the list, aborts the previous request and loads the new section', async () => {
+  it('changes section: drops the list, aborts the previous request and loads the new section without articles', async () => {
     const { result } = await renderLoaded();
-    const firstSignal = getSectionArticles.mock.calls[0][1] as AbortSignal;
-    const usa = deferred<SectionPage>();
-    getSectionArticles.mockReturnValueOnce(usa.promise);
+    const firstSignal = sectionRequest(0).signal;
+    const usa = deferred<LoadSectionNewsResult>();
+    loadSectionNews.mockReturnValueOnce(usa.promise);
 
     await act(async () => result.current.selectSection('usa'));
 
@@ -789,10 +813,11 @@ describe('useNewsViewModel', () => {
     expect(result.current.selectedSection).toBe('usa');
     expect(result.current.groups).toEqual([]);
     expect(result.current.updatedAtLabel).toBeUndefined();
-    expect(firstSignal.aborted).toBe(true);
-    expect(getSectionArticles).toHaveBeenLastCalledWith('usa', expect.any(AbortSignal));
+    expect(firstSignal?.aborted).toBe(true);
+    expect(sectionRequest(1)).toEqual({ section: 'usa', hasArticles: false, signal: expect.any(AbortSignal) });
+    expect(sectionRequest(1).signal?.aborted).toBe(false);
 
-    await act(async () => usa.resolve({ groups: [{ key: 'topHeadlines', articles: [first] }], next: { page: 1 } }));
+    await act(async () => usa.resolve(loaded({ groups: [{ key: 'topHeadlines', articles: [first] }], next: { page: 1 } })));
 
     expect(result.current.groups.map((group) => group.title)).toEqual(['Notizie principali']);
   });
@@ -802,33 +827,54 @@ describe('useNewsViewModel', () => {
 
     await act(async () => result.current.selectSection('italy'));
 
-    expect(getSectionArticles).toHaveBeenCalledTimes(1);
+    expect(loadSectionNews).toHaveBeenCalledTimes(1);
     expect(result.current.status).toBe('success');
   });
 
   it('discards the outcome of a request overtaken by a section change', async () => {
-    const italy = deferred<SectionPage>();
-    getSectionArticles.mockReturnValueOnce(italy.promise);
-    const { result } = await renderHook(() => useNewsViewModel());
-    const usa = deferred<SectionPage>();
-    getSectionArticles.mockReturnValueOnce(usa.promise);
+    const italy = deferred<LoadSectionNewsResult>();
+    loadSectionNews.mockReturnValueOnce(italy.promise);
+    const { result } = await renderHook(() => useNewsViewModel(USE_CASES));
+    const usa = deferred<LoadSectionNewsResult>();
+    loadSectionNews.mockReturnValueOnce(usa.promise);
 
     await act(async () => result.current.selectSection('usa'));
-    await act(async () => italy.resolve(FIRST_PAGE));
+    await act(async () => italy.resolve(loaded(FIRST_PAGE)));
 
+    expect(sectionRequest(0).signal?.aborted).toBe(true);
     expect(result.current.status).toBe('loading');
     expect(result.current.groups).toEqual([]);
 
-    await act(async () => usa.resolve({ groups: [{ key: 'topHeadlines', articles: [second] }] }));
+    await act(async () => usa.resolve(loaded({ groups: [{ key: 'topHeadlines', articles: [second] }] })));
 
     expect(result.current.status).toBe('success');
     expect(result.current.groups[0].items[0].id).toBe(second.id);
     expect(result.current.hasMore).toBe(false);
   });
 
+  it('ignores a load whose use case rejects because a section change cancelled it', async () => {
+    const italy = deferred<LoadSectionNewsResult>();
+    loadSectionNews.mockReturnValueOnce(italy.promise);
+    const { result } = await renderHook(() => useNewsViewModel(USE_CASES));
+    const usa = deferred<LoadSectionNewsResult>();
+    loadSectionNews.mockReturnValueOnce(usa.promise);
+
+    await act(async () => result.current.selectSection('usa'));
+    await act(async () => italy.reject(createAbortError()));
+
+    expect(result.current.status).toBe('loading');
+    expect(result.current.selectedSection).toBe('usa');
+    expect(result.current.errorMessage).toBeNull();
+
+    await act(async () => usa.resolve(loaded({ groups: [{ key: 'topHeadlines', articles: [second] }] })));
+
+    expect(result.current.status).toBe('success');
+    expect(result.current.groups.map((group) => group.key)).toEqual(['topHeadlines']);
+  });
+
   it('loads more news at the end of the list and keeps the cursor to retry when a page fails', async () => {
     const { result } = await renderLoaded();
-    getSectionArticles.mockRejectedValueOnce(new NewsError('rateLimit'));
+    loadMoreNews.mockResolvedValueOnce(pageFailed('rateLimit', { page: 1 }));
 
     await act(async () => result.current.loadMore());
     await waitFor(() => expect(result.current.status).toBe('error'));
@@ -837,101 +883,23 @@ describe('useNewsViewModel', () => {
     expect(result.current.groups).toHaveLength(2);
     expect(result.current.hasMore).toBe(true);
 
-    getSectionArticles.mockResolvedValueOnce({ groups: [MORE_NEWS] });
+    loadMoreNews.mockResolvedValueOnce(appended([FRONT_PAGES, LATEST_ANSA, MORE_NEWS]));
     await act(async () => result.current.loadMore());
     await waitFor(() => expect(result.current.status).toBe('success'));
 
-    expect(getSectionArticles.mock.calls.slice(1).map((call) => call[2])).toEqual([{ page: 1 }, { page: 1 }]);
+    expect(loadMoreNews.mock.calls.map(([request]) => request.cursor)).toEqual([{ page: 1 }, { page: 1 }]);
+    expect(moreRequest(1).signal).not.toBe(moreRequest(0).signal);
     expect(result.current.hasMore).toBe(false);
     expect(result.current.groups).toHaveLength(3);
 
     await act(async () => result.current.loadMore());
 
-    expect(getSectionArticles).toHaveBeenCalledTimes(3);
+    expect(loadMoreNews).toHaveBeenCalledTimes(2);
   });
 
-  it('ignores more news while a load is in progress', async () => {
-    const load = deferred<SectionPage>();
-    getSectionArticles.mockReturnValueOnce(load.promise);
-    const { result } = await renderHook(() => useNewsViewModel());
-
-    await act(async () => result.current.loadMore());
-
-    expect(getSectionArticles).toHaveBeenCalledTimes(1);
-  });
-
-  it('requests the following page at once when a page of more news adds only duplicates', async () => {
+  it('asks again the page that failed with the cursor the use case gives back', async () => {
     const { result } = await renderLoaded();
-    const duplicatesPage = deferred<SectionPage>();
-    const followingPage = deferred<SectionPage>();
-    getSectionArticles.mockReturnValueOnce(duplicatesPage.promise).mockReturnValueOnce(followingPage.promise);
-
-    await act(async () => result.current.loadMore());
-    await act(async () => duplicatesPage.resolve({ groups: [DUPLICATES], next: { page: 2 } }));
-
-    expect(result.current.status).toBe('loadingMore');
-    expect(result.current.groups).toHaveLength(2);
-    expect(getSectionArticles.mock.calls.slice(1).map((call) => call[2])).toEqual([{ page: 1 }, { page: 2 }]);
-    expect(getSectionArticles.mock.calls[2][1]).toBe(getSectionArticles.mock.calls[1][1]);
-
-    await act(async () => result.current.loadMore());
-
-    expect(getSectionArticles).toHaveBeenCalledTimes(3);
-
-    await act(async () => followingPage.resolve({ groups: [MORE_NEWS], next: { page: 3 } }));
-
-    expect(result.current.status).toBe('success');
-    expect(result.current.groups.map((group) => group.key)).toEqual(['frontPages', 'latestAnsa', 'moreNews']);
-    expect(result.current.groups[2].items.map((item) => item.id)).toEqual([fourth.id]);
-    expect(result.current.hasMore).toBe(true);
-    expect(getSectionArticles).toHaveBeenCalledTimes(3);
-  });
-
-  it('requests the following page at once when a page of more news has no groups', async () => {
-    const { result } = await renderLoaded();
-    getSectionArticles
-      .mockResolvedValueOnce({ groups: [], next: { page: 2 } })
-      .mockResolvedValueOnce({ groups: [MORE_NEWS] });
-
-    await act(async () => result.current.loadMore());
-    await waitFor(() => expect(result.current.status).toBe('success'));
-
-    expect(getSectionArticles.mock.calls.slice(1).map((call) => call[2])).toEqual([{ page: 1 }, { page: 2 }]);
-    expect(result.current.groups.map((group) => group.key)).toEqual(['frontPages', 'latestAnsa', 'moreNews']);
-    expect(result.current.hasMore).toBe(false);
-  });
-
-  it('ends in success without more news when the last page of the request adds only duplicates', async () => {
-    const { result } = await renderLoaded();
-    const groups = result.current.groups;
-    getSectionArticles.mockResolvedValueOnce({ groups: [DUPLICATES] });
-
-    await act(async () => result.current.loadMore());
-    await waitFor(() => expect(result.current.status).toBe('success'));
-
-    expect(result.current.hasMore).toBe(false);
-    expect(result.current.groups).toBe(groups);
-    expect(result.current.notice).toBeNull();
-    expect(getSectionArticles).toHaveBeenCalledTimes(2);
-  });
-
-  it('ends in success without more news when the last page of the request has no groups', async () => {
-    const { result } = await renderLoaded();
-    getSectionArticles.mockResolvedValueOnce({ groups: [] });
-
-    await act(async () => result.current.loadMore());
-    await waitFor(() => expect(result.current.status).toBe('success'));
-
-    expect(result.current.hasMore).toBe(false);
-    expect(result.current.groups).toHaveLength(2);
-    expect(getSectionArticles).toHaveBeenCalledTimes(2);
-  });
-
-  it('stops at a page that fails after a skipped one and asks that page again on the next loadMore', async () => {
-    const { result } = await renderLoaded();
-    getSectionArticles
-      .mockResolvedValueOnce({ groups: [DUPLICATES], next: { page: 2 } })
-      .mockRejectedValueOnce(new NewsError('network'));
+    loadMoreNews.mockResolvedValueOnce(pageFailed('network', { page: 3 }));
 
     await act(async () => result.current.loadMore());
     await waitFor(() => expect(result.current.status).toBe('error'));
@@ -941,13 +909,44 @@ describe('useNewsViewModel', () => {
     expect(result.current.hasMore).toBe(true);
     expect(result.current.groups).toHaveLength(2);
 
-    getSectionArticles.mockResolvedValueOnce({ groups: [MORE_NEWS] });
+    loadMoreNews.mockResolvedValueOnce(appended([FRONT_PAGES, LATEST_ANSA, MORE_NEWS]));
     await act(async () => result.current.loadMore());
     await waitFor(() => expect(result.current.status).toBe('success'));
 
-    expect(getSectionArticles.mock.calls.slice(1).map((call) => call[2])).toEqual([{ page: 1 }, { page: 2 }, { page: 2 }]);
+    expect(loadMoreNews.mock.calls.map(([request]) => request.cursor)).toEqual([{ page: 1 }, { page: 3 }]);
     expect(result.current.groups).toHaveLength(3);
     expect(result.current.loadMoreFailed).toBe(false);
+  });
+
+  it('ignores more news while the first page or another page is loading', async () => {
+    const load = deferred<LoadSectionNewsResult>();
+    loadSectionNews.mockReturnValueOnce(load.promise);
+    const { result } = await renderHook(() => useNewsViewModel(USE_CASES));
+
+    await act(async () => result.current.loadMore());
+
+    expect(loadMoreNews).not.toHaveBeenCalled();
+
+    await act(async () => load.resolve(loaded(FIRST_PAGE)));
+    await act(async () => result.current.loadMore());
+    await act(async () => result.current.loadMore());
+
+    expect(result.current.status).toBe('loadingMore');
+    expect(loadMoreNews).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the list given back by more news as it is, without more news when no cursor comes with it', async () => {
+    const { result } = await renderLoaded();
+    const groups = result.current.groups;
+    loadMoreNews.mockResolvedValueOnce(appended(FIRST_PAGE.groups));
+
+    await act(async () => result.current.loadMore());
+    await waitFor(() => expect(result.current.status).toBe('success'));
+
+    expect(result.current.hasMore).toBe(false);
+    expect(result.current.groups).toBe(groups);
+    expect(result.current.notice).toBeNull();
+    expect(loadMoreNews).toHaveBeenCalledTimes(1);
   });
 
   it('exposes a failed page of more news until its retry starts and not after the retry succeeds', async () => {
@@ -955,25 +954,25 @@ describe('useNewsViewModel', () => {
 
     expect(result.current.loadMoreFailed).toBe(false);
 
-    getSectionArticles.mockRejectedValueOnce(new NewsError('network'));
+    loadMoreNews.mockResolvedValueOnce(pageFailed('network', { page: 1 }));
     await act(async () => result.current.loadMore());
     await waitFor(() => expect(result.current.status).toBe('error'));
 
     expect(result.current.loadMoreFailed).toBe(true);
 
-    const retry = deferred<SectionPage>();
-    getSectionArticles.mockReturnValueOnce(retry.promise);
+    const retry = deferred<LoadMoreNewsResult>();
+    loadMoreNews.mockReturnValueOnce(retry.promise);
     await act(async () => result.current.loadMore());
 
     expect(result.current.status).toBe('loadingMore');
     expect(result.current.loadMoreFailed).toBe(false);
 
-    await act(async () => retry.resolve({ groups: [MORE_NEWS], next: { page: 2 } }));
+    await act(async () => retry.resolve(appended([FRONT_PAGES, LATEST_ANSA, MORE_NEWS], { page: 2 })));
 
     expect(result.current.status).toBe('success');
     expect(result.current.loadMoreFailed).toBe(false);
 
-    getSectionArticles.mockRejectedValueOnce(new NewsError('timeout'));
+    loadSectionNews.mockResolvedValueOnce(failed('timeout'));
     await act(async () => result.current.refresh());
     await waitFor(() => expect(result.current.status).toBe('error'));
 
@@ -982,129 +981,131 @@ describe('useNewsViewModel', () => {
 
   it('keeps a failed page of more news through a failed refresh and drops it after a successful one', async () => {
     const { result } = await renderLoaded();
-    getSectionArticles.mockRejectedValueOnce(new NewsError('network'));
+    loadMoreNews.mockResolvedValueOnce(pageFailed('network', { page: 1 }));
     await act(async () => result.current.loadMore());
     await waitFor(() => expect(result.current.loadMoreFailed).toBe(true));
 
-    const failedRefresh = deferred<SectionPage>();
-    getSectionArticles.mockReturnValueOnce(failedRefresh.promise);
+    const failedRefresh = deferred<LoadSectionNewsResult>();
+    loadSectionNews.mockReturnValueOnce(failedRefresh.promise);
     await act(async () => result.current.refresh());
 
     expect(result.current.status).toBe('refreshing');
     expect(result.current.loadMoreFailed).toBe(false);
 
-    await act(async () => failedRefresh.reject(new NewsError('timeout')));
+    await act(async () => failedRefresh.resolve(failed('timeout')));
     await waitFor(() => expect(result.current.status).toBe('error'));
 
     expect(result.current.loadMoreFailed).toBe(true);
     expect(result.current.hasMore).toBe(true);
     expect(result.current.groups).toHaveLength(2);
 
-    getSectionArticles.mockResolvedValueOnce(FIRST_PAGE);
+    loadSectionNews.mockResolvedValueOnce(loaded(FIRST_PAGE));
     await act(async () => result.current.refresh());
     await waitFor(() => expect(result.current.status).toBe('success'));
 
     expect(result.current.loadMoreFailed).toBe(false);
   });
 
-  it('discards a page of more news overtaken by a section change and requests no following page', async () => {
+  it('discards a page of more news overtaken by a section change', async () => {
     const { result } = await renderLoaded();
-    const morePage = deferred<SectionPage>();
-    const usa = deferred<SectionPage>();
-    getSectionArticles.mockReturnValueOnce(morePage.promise).mockReturnValueOnce(usa.promise);
+    const more = deferred<LoadMoreNewsResult>();
+    const usa = deferred<LoadSectionNewsResult>();
+    loadMoreNews.mockReturnValueOnce(more.promise);
+    loadSectionNews.mockReturnValueOnce(usa.promise);
 
     await act(async () => result.current.loadMore());
-    const moreSignal = getSectionArticles.mock.calls[1][1] as AbortSignal;
+    const moreSignal = moreRequest(0).signal;
     await act(async () => result.current.selectSection('usa'));
-    await act(async () => morePage.resolve({ groups: [DUPLICATES], next: { page: 2 } }));
+    await act(async () => more.resolve(appended([FRONT_PAGES, LATEST_ANSA, MORE_NEWS], { page: 2 })));
 
-    expect(moreSignal.aborted).toBe(true);
-    expect(getSectionArticles).toHaveBeenCalledTimes(3);
+    expect(moreSignal?.aborted).toBe(true);
     expect(result.current.status).toBe('loading');
     expect(result.current.selectedSection).toBe('usa');
+    expect(result.current.groups).toEqual([]);
 
-    await act(async () => usa.resolve({ groups: [{ key: 'topHeadlines', articles: [first] }] }));
+    await act(async () => usa.resolve(loaded({ groups: [{ key: 'topHeadlines', articles: [first] }] })));
 
     expect(result.current.status).toBe('success');
     expect(result.current.groups.map((group) => group.key)).toEqual(['topHeadlines']);
-    expect(getSectionArticles).toHaveBeenCalledTimes(3);
+    expect(result.current.hasMore).toBe(false);
   });
 
-  it('discards the following page of more news when a refresh overtakes it', async () => {
+  it('discards more news overtaken by a refresh when their use case rejects for the cancellation', async () => {
     const { result } = await renderLoaded();
-    const followingPage = deferred<SectionPage>();
-    const refresh = deferred<SectionPage>();
-    getSectionArticles
-      .mockResolvedValueOnce({ groups: [DUPLICATES], next: { page: 2 } })
-      .mockReturnValueOnce(followingPage.promise)
-      .mockReturnValueOnce(refresh.promise);
+    const more = deferred<LoadMoreNewsResult>();
+    const refresh = deferred<LoadSectionNewsResult>();
+    loadMoreNews.mockReturnValueOnce(more.promise);
+    loadSectionNews.mockReturnValueOnce(refresh.promise);
 
     await act(async () => result.current.loadMore());
-    await waitFor(() => expect(getSectionArticles).toHaveBeenCalledTimes(3));
-    const chainSignal = getSectionArticles.mock.calls[2][1] as AbortSignal;
-
+    const moreSignal = moreRequest(0).signal;
     await act(async () => result.current.refresh());
-    await act(async () => followingPage.resolve({ groups: [MORE_NEWS], next: { page: 3 } }));
+    await act(async () => more.reject(createAbortError()));
 
-    expect(chainSignal.aborted).toBe(true);
-    expect(getSectionArticles).toHaveBeenCalledTimes(4);
+    expect(moreSignal?.aborted).toBe(true);
+    expect(sectionRequest(1)).toEqual({ section: 'italy', hasArticles: true, signal: expect.any(AbortSignal) });
     expect(result.current.status).toBe('refreshing');
     expect(result.current.groups).toHaveLength(2);
+    expect(result.current.errorMessage).toBeNull();
 
-    await act(async () => refresh.resolve({ groups: [LATEST_ANSA], next: { page: 1 } }));
+    await act(async () => refresh.resolve(loaded({ groups: [LATEST_ANSA], next: { page: 1 } })));
 
     expect(result.current.status).toBe('success');
     expect(result.current.groups.map((group) => group.key)).toEqual(['latestAnsa']);
     expect(result.current.hasMore).toBe(true);
   });
 
-  it('opens an article in the in-app browser from the card, once at a time', async () => {
-    const opening = deferred<WebBrowserResult>();
-    openBrowser.mockReturnValueOnce(opening.promise);
+  it('opens the article of a card with the use case, without a notice when it opens or is ignored', async () => {
     const { result } = await renderLoaded();
     const [firstItem, secondItem] = result.current.groups[0].items;
+    openArticle.mockResolvedValueOnce('opened').mockResolvedValueOnce('ignored');
 
     await act(async () => firstItem.onPress());
     await act(async () => secondItem.onPress());
 
-    expect(openBrowser).toHaveBeenCalledTimes(1);
-    expect(openBrowser).toHaveBeenCalledWith(first.url);
-    expect(openUrl).not.toHaveBeenCalled();
-
-    await act(async () => opening.resolve(DISMISSED));
-    await act(async () => secondItem.onPress());
-
-    expect(openBrowser).toHaveBeenCalledTimes(2);
-    expect(openBrowser).toHaveBeenLastCalledWith(second.url);
+    expect(openArticle.mock.calls).toEqual([[first], [second]]);
+    expect(openArticle.mock.calls[0][0]).toBe(first);
     expect(result.current.notice).toBeNull();
+    expect(result.current.status).toBe('success');
   });
 
-  it('falls back to the system browser when the in-app browser fails and reports when both fail', async () => {
-    openBrowser.mockRejectedValue(new Error('unavailable'));
+  it('reports an article that could not be opened, keeping the list', async () => {
     const { result } = await renderLoaded();
-    const item = result.current.groups[0].items[0];
+    openArticle.mockResolvedValueOnce('failed');
 
-    await act(async () => item.onPress());
-
-    expect(openUrl).toHaveBeenCalledWith(first.url);
-    expect(result.current.notice).toBeNull();
-
-    openUrl.mockRejectedValueOnce(new Error('no browser'));
-    await act(async () => item.onPress());
+    await act(async () => result.current.groups[1].items[0].onPress());
     await waitFor(() => expect(result.current.notice).toBe("Impossibile aprire l'articolo."));
 
+    expect(openArticle.mock.calls).toEqual([[third]]);
     expect(result.current.status).toBe('success');
     expect(result.current.groups).toHaveLength(2);
+    expect(result.current.errorMessage).toBeNull();
   });
 
   it('aborts the request in progress when unmounted', async () => {
-    const load = deferred<SectionPage>();
-    getSectionArticles.mockReturnValueOnce(load.promise);
-    const { unmount } = await renderHook(() => useNewsViewModel());
-    const signal = getSectionArticles.mock.calls[0][1] as AbortSignal;
+    const { unmount } = await renderHook(() => useNewsViewModel(USE_CASES));
+    const signal = sectionRequest(0).signal;
 
     await unmount();
 
-    expect(signal.aborted).toBe(true);
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it('uses the news use cases of the container when it receives none', async () => {
+    containerUseCases.loadSectionNews.mockResolvedValueOnce(loaded(FIRST_PAGE));
+    containerUseCases.loadMoreNews.mockResolvedValueOnce(appended([FRONT_PAGES, LATEST_ANSA, MORE_NEWS]));
+
+    const { result } = await renderHook(() => useNewsViewModel());
+    await waitFor(() => expect(result.current.status).toBe('success'));
+    await act(async () => result.current.groups[0].items[0].onPress());
+    await act(async () => result.current.loadMore());
+    await waitFor(() => expect(result.current.groups).toHaveLength(3));
+
+    expect(containerUseCases.loadSectionNews).toHaveBeenCalledTimes(1);
+    expect(containerUseCases.openArticle).toHaveBeenCalledWith(first);
+    expect(containerUseCases.loadMoreNews).toHaveBeenCalledTimes(1);
+    expect(loadSectionNews).not.toHaveBeenCalled();
+    expect(loadMoreNews).not.toHaveBeenCalled();
+    expect(openArticle).not.toHaveBeenCalled();
   });
 });

@@ -1,10 +1,10 @@
-import everythingAnsa from '@/services/fixtures/everything-ansa.json';
-import everythingItaly from '@/services/fixtures/everything-italy.json';
-import everythingUs from '@/services/fixtures/everything-us.json';
-import topHeadlinesItaly from '@/services/fixtures/top-headlines-italy.json';
-import topHeadlinesUs from '@/services/fixtures/top-headlines-us.json';
-import type { NewsApiRequestDto } from '@/services/news-api-dto';
-import { getFixturePage } from '@/services/news-fixture-service';
+import everythingAnsa from '@/data/services/fixtures/everything-ansa.json';
+import everythingItaly from '@/data/services/fixtures/everything-italy.json';
+import everythingUs from '@/data/services/fixtures/everything-us.json';
+import topHeadlinesItaly from '@/data/services/fixtures/top-headlines-italy.json';
+import topHeadlinesUs from '@/data/services/fixtures/top-headlines-us.json';
+import type { NewsApiRequestDto } from '@/data/services/news-api-dto';
+import { getFixturePage } from '@/data/services/news-fixture-service';
 
 const ITALY_TOP_HEADLINES: NewsApiRequestDto = {
   endpoint: 'top-headlines',

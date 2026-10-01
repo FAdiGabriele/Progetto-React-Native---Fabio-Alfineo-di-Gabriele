@@ -1,10 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import everythingAnsa from '@/services/fixtures/everything-ansa.json';
-import topHeadlinesItaly from '@/services/fixtures/top-headlines-italy.json';
-import topHeadlinesUs from '@/services/fixtures/top-headlines-us.json';
-import type { NewsCacheEntryDto } from '@/services/news-api-dto';
-import { readEntry, writeEntry } from '@/services/news-cache-service';
+import everythingAnsa from '@/data/services/fixtures/everything-ansa.json';
+import topHeadlinesItaly from '@/data/services/fixtures/top-headlines-italy.json';
+import topHeadlinesUs from '@/data/services/fixtures/top-headlines-us.json';
+import type { NewsCacheEntryDto } from '@/data/services/news-api-dto';
+import { readEntry, writeEntry } from '@/data/services/news-cache-service';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   jest.requireActual('@react-native-async-storage/async-storage/jest/async-storage-mock')
