@@ -10,14 +10,14 @@
  * key; the requests of the news sections read the two page sizes; the
  * repository reads the maximum number of results. The
  * requests of the sections and their parameters, such as the country or the
- * domains, are defined in `data/repositories/news-section-requests.ts`.
+ * domains, are defined in `src/data/repositories/news-section-requests.ts`.
  *
  * The API key comes from the `.env` file (`EXPO_PUBLIC_NEWS_API_KEY`
  * variable, template in `.env.example`); restart the dev server after
  * every change to `.env`. `EXPO_PUBLIC_*` values are inlined into the app
  * bundle at build time, which is acceptable for a demo project on
  * NewsAPI's free plan. The same file may set `EXPO_PUBLIC_NEWS_USE_FIXTURES`
- * to `true` to serve the fixtures of `data/services/fixtures/` instead of
+ * to `true` to serve the fixtures of `src/data/services/fixtures/` instead of
  * calling NewsAPI, with no requests sent and no key needed: the news service
  * reads that variable itself, so that a build without fixture mode leaves the
  * fixtures out of the bundle.

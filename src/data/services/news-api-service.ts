@@ -15,7 +15,7 @@ type FixtureService = typeof import('@/data/services/news-fixture-service');
 
 /**
  * The fixture service in fixture mode, `undefined` otherwise. The variable is read here, not in
- * `data/config`, and the service is required behind it instead of imported: a production
+ * `src/data/config`, and the service is required behind it instead of imported: a production
  * build inlines the variable and drops the branch never taken, so without fixture mode the
  * fixtures stay out of the bundle.
  */
@@ -213,8 +213,8 @@ function parseResponse({ status, ok, body }: RawResponse): NewsApiPageDto {
  * Fetches one page of a NewsAPI request: its articles and the total number of results.
  * A request that fails on the network is sent once more, after a pause. Rejects with a
  * NewsApiServiceError, or with an abort error when the caller aborts `signal`: the one of
- * fetch, unchanged, or one like it during the pause before the retry. In fixture mode the
- * page comes from `data/services/fixtures/`, without any request and without checking the key.
+ * fetch, unchanged, or one like it during the pause before the retry. In fixture mode the page
+ * comes from `src/data/services/fixtures/`, without any request and without checking the key.
  */
 export async function getArticles(
   request: NewsApiRequestDto,

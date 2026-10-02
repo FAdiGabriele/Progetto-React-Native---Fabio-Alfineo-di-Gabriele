@@ -2,8 +2,9 @@
 const { defineConfig } = require('eslint/config');
 const expoConfig = require('eslint-config-expo/flat');
 
-// Project modules are matched both as `@/` aliases and as relative paths;
-// relative paths are matched by folder name, at any depth.
+// Folder and file names in the comments and messages below are those of src/, which the
+// folders of test/ mirror. Project modules are matched both as `@/` aliases and as relative
+// paths; relative paths are matched by folder name, at any depth.
 const PROJECT = String.raw`^(?:@/|(?:\.\./)+)`;
 const folder = (name) => String.raw`${PROJECT}${name}(?:/|$)`;
 // The start of a module inside `parent`, also as a sibling folder imports it: `../<name>`.
@@ -39,6 +40,8 @@ const HOOKS_EXCEPT_COLOR_SCHEME = String.raw`${inside('presentation')}hooks(?!/u
 const PRESENTATION_UTILS = nested('presentation', 'utils');
 const PROJECT_EXCEPT_CONFIG = String.raw`^(?!(?:@/data/|\./)config(?:\.\w+)*$)(?:@/|\.\.?/)`;
 const PROJECT_EXCEPT_DATA_UTILS = String.raw`^(?!@/data/utils/|\./|(?:\.\./)+(?:data/)?utils/)(?:@/|\.\.?/)`;
+// A relative path that climbs to the project root and goes back into src/, which the patterns above miss.
+const THROUGH_ROOT = String.raw`^(?:\.\./)+src(?:/|$)`;
 const REACT_LIBRARY = String.raw`^react(?:/|$)`;
 const REACT = String.raw`^react(?:-native)?(?:/|$)`;
 const PLATFORM_LIBRARIES = [String.raw`^react-native(?:[-/]|$)`, String.raw`^@react-native`, String.raw`^expo(?:[-/]|$)`];
@@ -47,6 +50,11 @@ const OUTSIDE_DOMAIN = String.raw`^(?!@/domain/|\.\.?/)`;
 const ANYTHING = '.';
 
 const forbid = (message, paths) => ({ regex: paths.join('|'), message });
+
+const NO_PATH_THROUGH_ROOT = forbid(
+  'Modules of src/ must not be imported with a relative path through the project root: use the @/ alias.',
+  [THROUGH_ROOT]
+);
 
 const NO_REACT = forbid('The data layer and the container must not depend on React.', [REACT]);
 
@@ -82,10 +90,14 @@ const SUPPORT_FORBIDDEN = [
   BOOTSTRAP,
 ];
 
-// When several blocks match a file, the last one sets the rule.
+// A folder or a file of src/ and the one of test/ that mirrors it, where a test has the name of its module.
+const withTests = (...paths) =>
+  paths.flatMap((path) => [`src/${path}`, `test/${path.replace(/(\.tsx?)$/, '.test$1')}`]);
+
+// When several blocks match a file, the last one sets the rule: every block forbids paths through the root.
 const restrictImports = (files, ...patterns) => ({
   files,
-  rules: { 'no-restricted-imports': ['error', { patterns }] },
+  rules: { 'no-restricted-imports': ['error', { patterns: [...patterns, NO_PATH_THROUGH_ROOT] }] },
 });
 
 module.exports = defineConfig([
@@ -94,7 +106,7 @@ module.exports = defineConfig([
     ignores: ['dist/*'],
   },
   restrictImports(
-    ['app/**'],
+    withTests('app/**'),
     forbid('Routes show a screen: they must not import the data layer, the domain or the container.', [
       DATA,
       DOMAIN,
@@ -102,7 +114,7 @@ module.exports = defineConfig([
     ])
   ),
   restrictImports(
-    ['domain/**'],
+    withTests('domain/**'),
     forbid('The domain imports only its own files: no library, no layer, no support module.', [
       OUTSIDE_DOMAIN,
       APP,
@@ -113,7 +125,7 @@ module.exports = defineConfig([
   ),
   // Any file of the data layer; the blocks below set the rule of its folders.
   restrictImports(
-    ['data/**'],
+    withTests('data/**'),
     forbid('The data layer must not import routes, the container or the presentation.', [
       APP,
       DI,
@@ -121,15 +133,15 @@ module.exports = defineConfig([
     ]),
     NO_REACT
   ),
-  restrictImports(['data/services/**'], SERVICE_FORBIDDEN, NO_REACT),
+  restrictImports(withTests('data/services/**'), SERVICE_FORBIDDEN, NO_REACT),
   // The browser service opens URLs with the platform APIs of react-native.
   restrictImports(
-    ['data/services/browser-service.ts', 'data/services/browser-service.test.ts'],
+    withTests('data/services/browser-service.ts'),
     SERVICE_FORBIDDEN,
     forbid('Services must not depend on React.', [REACT_LIBRARY])
   ),
   restrictImports(
-    ['data/repositories/**'],
+    withTests('data/repositories/**'),
     forbid(
       'Repositories may import only services, DTOs, the domain, the other files of data/repositories, data/config and data/utils.',
       [APP, DI, PRESENTATION]
@@ -137,29 +149,30 @@ module.exports = defineConfig([
     NO_REACT
   ),
   restrictImports(
-    ['data/config.ts', 'data/config.test.ts'],
+    withTests('data/config.ts'),
     forbid('data/config must not import other modules of the project.', [PROJECT_EXCEPT_CONFIG])
   ),
   restrictImports(
-    ['data/utils/**'],
+    withTests('data/utils/**'),
     forbid('data/utils may import only its own files, no other module of the project.', [
       PROJECT_EXCEPT_DATA_UTILS,
     ])
   ),
+  // Blocks by file name, like this one and the view model one, cover only src/: no test has those names.
   restrictImports(
-    ['data/services/**/*-dto.ts', 'domain/models/**/*-model.ts'],
+    ['src/data/services/**/*-dto.ts', 'src/domain/models/**/*-model.ts'],
     forbid('DTO and model files only declare types, constants and error classes: they import nothing.', [
       ANYTHING,
     ])
   ),
   restrictImports(
-    ['di/**'],
+    withTests('di/**'),
     forbid('The container may import only the data layer and the domain.', [APP, PRESENTATION]),
     NO_REACT
   ),
   // Any file of the presentation; the blocks below set the rule of its folders.
   restrictImports(
-    ['presentation/**'],
+    withTests('presentation/**'),
     forbid('The presentation must not import routes, the data layer, the container or bootstrap.', [
       APP,
       DATA,
@@ -167,18 +180,18 @@ module.exports = defineConfig([
       BOOTSTRAP,
     ])
   ),
-  restrictImports(['presentation/screens/**'], forbid(SCREEN_MESSAGE, SCREEN_FORBIDDEN)),
+  restrictImports(withTests('presentation/screens/**'), forbid(SCREEN_MESSAGE, SCREEN_FORBIDDEN)),
   restrictImports(
-    ['presentation/screens/news/**'],
+    withTests('presentation/screens/news/**'),
     forbid(SCREEN_MESSAGE, [...SCREEN_FORBIDDEN, SETTINGS_SCREEN])
   ),
   restrictImports(
-    ['presentation/screens/settings/**'],
+    withTests('presentation/screens/settings/**'),
     forbid(SCREEN_MESSAGE, [...SCREEN_FORBIDDEN, NEWS_SCREEN])
   ),
   // After the screen blocks, so that a view model keeps its own rule.
   restrictImports(
-    ['presentation/screens/**/use-*-view-model.ts'],
+    ['src/presentation/screens/**/use-*-view-model.ts'],
     forbid('View models may import only the container, the domain, i18n, presentation/utils and React.', [
       APP,
       DATA,
@@ -195,7 +208,7 @@ module.exports = defineConfig([
     )
   ),
   restrictImports(
-    ['presentation/components/**'],
+    withTests('presentation/components/**'),
     forbid(
       'UI components may import only other components, presentation/theme/theme, the theme hooks and UI libraries: data and texts arrive via props.',
       [
@@ -212,7 +225,7 @@ module.exports = defineConfig([
     )
   ),
   restrictImports(
-    ['presentation/i18n/**'],
+    withTests('presentation/i18n/**'),
     forbid(
       'i18n may import only its own files, the container, the domain, React and platform libraries.',
       [APP, DATA, SCREENS, COMPONENTS, THEME_FOLDER, BOOTSTRAP, HOOKS, PRESENTATION_UTILS]
@@ -220,7 +233,7 @@ module.exports = defineConfig([
   ),
   // presentation/theme/theme.ts and its test take the rule of their own block, further down.
   restrictImports(
-    ['presentation/theme/**'],
+    withTests('presentation/theme/**'),
     forbid(
       'The theme provider may import only the container, the domain, React, platform libraries and the color scheme context of presentation/hooks/use-color-scheme, not presentation/theme/theme.',
       [
@@ -238,16 +251,16 @@ module.exports = defineConfig([
     )
   ),
   restrictImports(
-    ['presentation/bootstrap/**'],
+    withTests('presentation/bootstrap/**'),
     forbid(
       'bootstrap may import only its own files, the i18n and theme providers, the container, the domain, React and platform libraries.',
       [APP, DATA, SCREENS, COMPONENTS, HOOKS, PRESENTATION_UTILS, THEME]
     )
   ),
-  restrictImports(['presentation/hooks/**', 'presentation/utils/**'], forbid(SUPPORT_MESSAGE, SUPPORT_FORBIDDEN)),
+  restrictImports(withTests('presentation/hooks/**', 'presentation/utils/**'), forbid(SUPPORT_MESSAGE, SUPPORT_FORBIDDEN)),
   // From theme.ts, the other files of its folder belong to the theme provider.
   restrictImports(
-    ['presentation/theme/theme.ts', 'presentation/theme/theme.test.ts'],
+    withTests('presentation/theme/theme.ts'),
     forbid(SUPPORT_MESSAGE, [...SUPPORT_FORBIDDEN, THEME_PREFERENCE_SIBLING])
   ),
 ]);

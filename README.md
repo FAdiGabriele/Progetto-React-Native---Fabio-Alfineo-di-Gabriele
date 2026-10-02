@@ -8,7 +8,7 @@ A React Native app, built with [Expo](https://expo.dev), that shows the main new
 - **Groups with a heading**: the list is divided into one group per request, each under its own heading, so that the two blocks of "Italia", which are not in one chronological order, are told apart: "Notizie principali" (the headlines of the two outlets) and "Ultime da ANSA", then "Altre notizie" for the news loaded at the end of the list; in "USA", "Notizie principali" too and "Altre notizie". In English: "Top headlines" (for both categories), "Latest from ANSA" and "More news". A request without articles has no heading.
 - **One card per article**, with image (or a placeholder), source, title, description, publication date and author. The title loses the " - Source" suffix that NewsAPI appends to the US headlines when it repeats the source name or the domain of the article, which the card already shows. A tap opens the article in the in-app browser, or in a new tab on web.
 - **Pull-to-refresh** on Android and iOS. On web, where the gesture does not exist, a **Refresh** button ("Aggiorna") next to the last check time reloads the list. If the refresh fails, the list stays as it was, including the news added at the end, and more can still be loaded.
-- **More news at the end of the list**: every time the scrolling reaches the bottom, the app loads one page of 20 articles from NewsAPI's `everything` on all the outlets of the category (ANSA, la Repubblica and Il Sole 24 Ore in "Italia", the US outlets listed in `data/repositories/news-section-requests.ts` in "USA"), sorted by date and appended without duplicates, up to 100 results per category. The first page never changes. When a page brings nothing new, the next one is requested right away; when a page fails, a "Retry" button ("Riprova") at the end of the list loads it again.
+- **More news at the end of the list**: every time the scrolling reaches the bottom, the app loads one page of 20 articles from NewsAPI's `everything` on all the outlets of the category (ANSA, la Repubblica and Il Sole 24 Ore in "Italia", the US outlets listed in `src/data/repositories/news-section-requests.ts` in "USA"), sorted by date and appended without duplicates, up to 100 results per category. The first page never changes. When a page brings nothing new, the next one is requested right away; when a page fails, a "Retry" button ("Riprova") at the end of the list loads it again.
 - **Last check time** under the header: the time when the list was received ("Ultimo controllo alle 14:30" / "Last checked at 2:30 PM"), or date and time when the list is from another day. It says when the app last asked NewsAPI, not how recent the articles are: on the free plan they are about one day old.
 - **Saved list**: the first page of the last list received for each category is kept on the device, request by request, so that it comes back with its groups and headings (the articles added at the end of the list are not saved, and a first page with a failed request does not replace the saved one). When loading fails and there is nothing else to show, for example when the app is opened without a network connection, the saved list appears with a non-blocking message and the time it was saved.
 - **Mobile and desktop layout**: one card per row on phones; in windows at least 768 points wide (CSS pixels on web; tablets too, and large phones held sideways) a grid of cards that are always at least 320 points wide: two per row from 768 points, three from 1056, and one more column whenever the cards stay that wide. Every heading spans the whole width and every group starts a new row. The app rotates with the device.
@@ -63,7 +63,7 @@ Then scan the QR code with Expo Go on your device, or press `a` for an Android e
 
 ### Fixture mode: develop without using the API quota
 
-Set `EXPO_PUBLIC_NEWS_USE_FIXTURES=true` in `.env`, or in the shell before `npx expo start` (bash: `EXPO_PUBLIC_NEWS_USE_FIXTURES=true npx expo start`; PowerShell: `$env:EXPO_PUBLIC_NEWS_USE_FIXTURES='true'; npx expo start`), and the app serves the real responses saved in `data/services/fixtures/` instead of calling NewsAPI: no request is sent and no key is needed. Leave the variable empty to use NewsAPI. Restart the server after changing it.
+Set `EXPO_PUBLIC_NEWS_USE_FIXTURES=true` in `.env`, or in the shell before `npx expo start` (bash: `EXPO_PUBLIC_NEWS_USE_FIXTURES=true npx expo start`; PowerShell: `$env:EXPO_PUBLIC_NEWS_USE_FIXTURES='true'; npx expo start`), and the app serves the real responses saved in `src/data/services/fixtures/` instead of calling NewsAPI: no request is sent and no key is needed. Leave the variable empty to use NewsAPI. Restart the server after changing it.
 
 Use it for day-to-day development: on the free plan every reload of the page, every Fast Refresh and every category switch costs requests. The fixtures hold one page per request: in fixture mode the first arrival at the end of the list adds the articles of the more-news fixture of the category (9 new cards in "Italia", 20 in "USA") and the next ones add nothing. A request with no fixture, such as one of a new category, ends with "An unexpected error occurred.". Leave the variable empty when checking the app against the real API.
 
@@ -93,33 +93,36 @@ npm test           # Jest (jest-expo preset, React Native Testing Library): pure
 
 ## Project structure
 
-The code follows a Clean Architecture with MVVM on the presentation side, with one root folder per layer, and ESLint checks the direction of the imports, which always points to the domain:
+The code follows a Clean Architecture with MVVM on the presentation side, with one folder per layer in `src/`, and ESLint checks the direction of the imports, which always points to the domain:
 
-- the **domain** (`domain/`) is the centre and imports nothing, not even a library: the models, the interfaces of the repositories and the use cases, which hold the rules of the app (what happens when a load fails with or without a saved list, which page of more news to ask for and when to skip one that adds nothing, one article opening at a time);
-- the **data layer** (`data/`) implements those interfaces with services, which talk to NewsAPI, to the storage of the device and to the browser, and repositories, which turn DTOs and transport errors into models and domain errors;
-- `di/container.ts` is the composition root, the only module that knows the data layer: it builds the use cases with the repositories and services and hands them to the presentation side;
-- in the **presentation** (`presentation/`), the **ViewModel** of a screen (a custom hook) receives the use cases, by default the ones of the container, keeps the state and prepares everything the screen renders (translated headings and labels, formatted dates, the props of the cards and the non-blocking notice), with no platform library; the **screen** only picks the component for the current status and passes the props down to the **UI components**.
+- the **domain** (`src/domain/`) is the centre and imports nothing, not even a library: the models, the interfaces of the repositories and the use cases, which hold the rules of the app (what happens when a load fails with or without a saved list, which page of more news to ask for and when to skip one that adds nothing, one article opening at a time);
+- the **data layer** (`src/data/`) implements those interfaces with services, which talk to NewsAPI, to the storage of the device and to the browser, and repositories, which turn DTOs and transport errors into models and domain errors;
+- `src/di/container.ts` is the composition root, the only module that knows the data layer: it builds the use cases with the repositories and services and hands them to the presentation side;
+- in the **presentation** (`src/presentation/`), the **ViewModel** of a screen (a custom hook) receives the use cases, by default the ones of the container, keeps the state and prepares everything the screen renders (translated headings and labels, formatted dates, the props of the cards and the non-blocking notice), with no platform library; the **screen** only picks the component for the current status and passes the props down to the **UI components**.
 
-Test files (`*.test.ts`, `*.test.tsx`) sit next to the modules they test.
+The unit tests live in `test/`, apart from the code, in folders that mirror those of `src/`: the test of a module has the same path under `test/`, with the `.test.ts` or `.test.tsx` suffix (for example `test/data/repositories/news-mapper.test.ts` tests `src/data/repositories/news-mapper.ts`). Tests import the modules with the `@/` alias, which points to `src/`, and ESLint applies to each folder of `test/` the import rules of the folder of `src/` it mirrors.
 
 ```
-app/                Expo Router routes: root layout, the "/" route (news screen) and the "/settings" route (settings screen), each showing only its screen
-domain/             The centre: models/ (news, language and theme models, the rule on duplicate articles), repositories/ (the interfaces that the data layer implements) and use-cases/ (load the news of a category, load more news, open an article)
-data/               Data layer
-  services/         NewsAPI client and DTOs, fixture mode, saved list, language and theme storage, app version, browser; fixtures/ with real responses
-  repositories/     The implementations of the domain interfaces, the mapper from DTO to Model, the NewsAPI requests of each category
-  config.ts         Configuration of the NewsAPI requests
-  utils/            Pure functions of the data layer: ISO dates of the responses, URLs
-di/
-  container.ts      Composition root: builds the use cases with the repositories and services of data/ and exposes them, with the repositories of the saved preferences and of the app version, to ViewModels, providers and start-up
-presentation/       Presentation (MVVM)
-  screens/          One folder per screen, each with the screen and its ViewModel (a custom hook): news/ and settings/
-  components/       UI components that receive everything through props: card, list, image, category chips, states, text button, banner, icon button (the settings gear), segmented control (the options of a setting)
-  i18n/             Italian and English dictionaries and the language provider
-  theme/            The theme provider (theme preference: system, light or dark; active theme and saving) and theme.ts, with the colors of the two themes and the layout measures
-  hooks/            Theme hooks and the context of the active theme
-  bootstrap/        App start-up: reads the saved theme and language together behind the splash screen, then mounts the two providers
-  utils/            Pure functions of the presentation: date formatting, layout
+src/                  App code: the Expo Router routes and one folder per layer
+  app/                Expo Router routes: root layout, the "/" route (news screen) and the "/settings" route (settings screen), each showing only its screen
+  domain/             The centre: models/ (news, language and theme models, the rule on duplicate articles), repositories/ (the interfaces that the data layer implements) and use-cases/ (load the news of a category, load more news, open an article)
+  data/               Data layer
+    services/         NewsAPI client and DTOs, fixture mode, saved list, language and theme storage, app version, browser; fixtures/ with real responses
+    repositories/     The implementations of the domain interfaces, the mapper from DTO to Model, the NewsAPI requests of each category
+    config.ts         Configuration of the NewsAPI requests
+    utils/            Pure functions of the data layer: ISO dates of the responses, URLs
+  di/
+    container.ts      Composition root: builds the use cases with the repositories and services of data/ and exposes them, with the repositories of the saved preferences and of the app version, to ViewModels, providers and start-up
+  presentation/       Presentation (MVVM)
+    screens/          One folder per screen, each with the screen and its ViewModel (a custom hook): news/ and settings/
+    components/       UI components that receive everything through props: card, list, image, category chips, states, text button, banner, icon button (the settings gear), segmented control (the options of a setting)
+    i18n/             Italian and English dictionaries and the language provider
+    theme/            The theme provider (theme preference: system, light or dark; active theme and saving) and theme.ts, with the colors of the two themes and the layout measures
+    hooks/            Theme hooks and the context of the active theme
+    bootstrap/        App start-up: reads the saved theme and language together behind the splash screen, then mounts the two providers
+    utils/            Pure functions of the presentation: date formatting, layout
+test/                 Unit tests (Jest), in folders that mirror those of src/
+assets/               Images named in app.json: app icons, splash image, web favicon
 ```
 
-Constants (base URL, 50 articles per headlines request, 20 articles per page at the end of the list, 100 results per request, 10-second timeout, one-second pause before the retry of a network failure) live in `data/config.ts`. The categories are the keys of `NEWS_SECTION_KEYS` in `domain/models/news-model.ts`, in the order of the chips; the requests of their first page and the request of their more news live in the data layer, in `data/repositories/news-section-requests.ts`, typed with the request DTO of the service. A new category needs its key, its requests, its chip label in `presentation/i18n/it.ts` and `presentation/i18n/en.ts` and, for fixture mode, a fixture for each of its requests in `data/services/fixtures/` mapped in `data/services/news-fixture-service.ts`.
+Constants (base URL, 50 articles per headlines request, 20 articles per page at the end of the list, 100 results per request, 10-second timeout, one-second pause before the retry of a network failure) live in `src/data/config.ts`. The categories are the keys of `NEWS_SECTION_KEYS` in `src/domain/models/news-model.ts`, in the order of the chips; the requests of their first page and the request of their more news live in the data layer, in `src/data/repositories/news-section-requests.ts`, typed with the request DTO of the service. A new category needs its key, its requests, its chip label in `src/presentation/i18n/it.ts` and `src/presentation/i18n/en.ts` and, for fixture mode, a fixture for each of its requests in `src/data/services/fixtures/` mapped in `src/data/services/news-fixture-service.ts`.
