@@ -1,12 +1,12 @@
-import { NETWORK_RETRY_DELAY_MS, REQUEST_TIMEOUT_MS } from '@/constants/config';
+import { NETWORK_RETRY_DELAY_MS, REQUEST_TIMEOUT_MS } from '@/data/config';
 import everythingAnsa from '@/data/services/fixtures/everything-ansa.json';
 import topHeadlinesItaly from '@/data/services/fixtures/top-headlines-italy.json';
 import topHeadlinesUs from '@/data/services/fixtures/top-headlines-us.json';
 import type { NewsApiRequestDto } from '@/data/services/news-api-dto';
 import { getArticles, NewsApiServiceError } from '@/data/services/news-api-service';
 
-jest.mock('@/constants/config', () => ({
-  ...jest.requireActual('@/constants/config'),
+jest.mock('@/data/config', () => ({
+  ...jest.requireActual('@/data/config'),
   NEWS_API_KEY: 'test-key',
   IS_NEWS_API_KEY_CONFIGURED: true,
 }));
@@ -192,7 +192,7 @@ function loadServiceWith(
   useFixtures?: string
 ): { service: NewsApiService; loadFixtureService: jest.Mock<FixtureService, []> } {
   jest.resetModules();
-  jest.doMock('@/constants/config', () => ({ ...jest.requireActual('@/constants/config'), ...values }));
+  jest.doMock('@/data/config', () => ({ ...jest.requireActual('@/data/config'), ...values }));
   const loadFixtureService = jest.fn(() =>
     jest.requireActual<FixtureService>('@/data/services/news-fixture-service')
   );

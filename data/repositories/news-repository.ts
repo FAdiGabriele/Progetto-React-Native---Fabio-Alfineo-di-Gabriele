@@ -1,4 +1,4 @@
-import { NEWS_MAX_RESULTS } from '@/constants/config';
+import { NEWS_MAX_RESULTS } from '@/data/config';
 import { mapGroups } from '@/data/repositories/news-mapper';
 import { NEWS_SECTION_REQUESTS, type NewsSectionRequests } from '@/data/repositories/news-section-requests';
 import type { NewsApiArticleDto, NewsApiPageDto, NewsApiRequestDto } from '@/data/services/news-api-dto';
@@ -13,7 +13,7 @@ import {
   type SavedNews,
 } from '@/domain/models/news-model';
 import type { NewsRepository } from '@/domain/repositories/news-repository';
-import { parseIsoDate } from '@/utils/date';
+import { parseIsoDate } from '@/data/utils/date';
 
 const FIRST_PAGE = 1;
 

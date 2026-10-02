@@ -4,7 +4,7 @@ import {
   NEWS_API_BASE_URL,
   NEWS_API_KEY,
   REQUEST_TIMEOUT_MS,
-} from '@/constants/config';
+} from '@/data/config';
 import type {
   NewsApiPageDto,
   NewsApiRequestDto,
@@ -15,7 +15,7 @@ type FixtureService = typeof import('@/data/services/news-fixture-service');
 
 /**
  * The fixture service in fixture mode, `undefined` otherwise. The variable is read here, not in
- * `constants/config`, and the service is required behind it instead of imported: a production
+ * `data/config`, and the service is required behind it instead of imported: a production
  * build inlines the variable and drops the branch never taken, so without fixture mode the
  * fixtures stay out of the bundle.
  */

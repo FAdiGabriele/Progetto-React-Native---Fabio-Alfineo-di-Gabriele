@@ -1,8 +1,8 @@
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
-import { AppBootstrap } from '@/bootstrap/app-bootstrap';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { AppBootstrap } from '@/presentation/bootstrap/app-bootstrap';
+import { useColorScheme } from '@/presentation/hooks/use-color-scheme';
 
 // The news screen stays under the settings even when `/settings` is opened directly.
 export const unstable_settings = {

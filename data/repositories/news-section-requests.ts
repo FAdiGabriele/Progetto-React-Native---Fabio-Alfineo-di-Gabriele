@@ -1,4 +1,4 @@
-import { NEWS_MORE_PAGE_SIZE, NEWS_PAGE_SIZE } from '@/constants/config';
+import { NEWS_MORE_PAGE_SIZE, NEWS_PAGE_SIZE } from '@/data/config';
 import type { NewsApiRequestDto } from '@/data/services/news-api-dto';
 import type { NewsGroupKey, NewsSectionKey } from '@/domain/models/news-model';
 

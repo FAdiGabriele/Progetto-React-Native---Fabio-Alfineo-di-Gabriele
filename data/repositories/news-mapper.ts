@@ -1,8 +1,8 @@
 import type { NewsApiArticleDto } from '@/data/services/news-api-dto';
 import { normalizeForComparison, withoutDuplicates } from '@/domain/models/news-groups';
 import type { Article, NewsGroup } from '@/domain/models/news-model';
-import { getUrlDomain, isHttpUrl } from '@/utils/url';
-import { parseIsoDate } from '@/utils/date';
+import { getUrlDomain, isHttpUrl } from '@/data/utils/url';
+import { parseIsoDate } from '@/data/utils/date';
 
 const REMOVED_TITLE = '[Removed]';
 

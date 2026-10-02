@@ -6,33 +6,39 @@ const expoConfig = require('eslint-config-expo/flat');
 // relative paths are matched by folder name, at any depth.
 const PROJECT = String.raw`^(?:@/|(?:\.\./)+)`;
 const folder = (name) => String.raw`${PROJECT}${name}(?:/|$)`;
-const file = (name) => String.raw`${PROJECT}${name}(?:\.\w+)*$`;
-// A folder inside `parent`, also as a sibling folder imports it: `../<name>/`.
-const nested = (parent, name) => String.raw`^(?:@/${parent}/|(?:\.\./)+(?:${parent}/)?)${name}(?:/|$)`;
+// The start of a module inside `parent`, also as a sibling folder imports it: `../<name>`.
+const inside = (parent) => String.raw`^(?:@/${parent}/|(?:\.\./)+(?:${parent}/)?)`;
+const nested = (parent, name) => String.raw`${inside(parent)}${name}(?:/|$)`;
 
 const APP = folder('app');
 const DATA = folder('data');
 const DATA_REPOSITORIES = nested('data', 'repositories');
 const DOMAIN = folder('domain');
 const DOMAIN_EXCEPT_MODELS = String.raw`${PROJECT}domain(?!/models/)(?:/|$)`;
-const CONTAINER = file('container');
-const SCREENS = folder('screens');
-// From a file in screens/<name>/: `./` is its own folder, `../<other>/` another screen.
+const DI = folder('di');
+const PRESENTATION = folder('presentation');
+const SCREENS = nested('presentation', 'screens');
+// From a file in presentation/screens/<name>/: `./` is its own folder, `../<other>/` another screen.
 const SCREENS_RELATIVE = String.raw`^\.\.?/(?!\.\./)`;
-// From a file in screens/<name>/: `../<other>/` is another screen, `../../` the project root.
+// From a file in presentation/screens/<name>/: `../<other>/` is another screen, `../../` the presentation folder.
 const OTHER_SCREEN_RELATIVE = String.raw`^\.\./(?!\.\./)`;
-const NEWS_SCREEN = folder('screens/news');
-const SETTINGS_SCREEN = folder('screens/settings');
-const COMPONENTS = folder('components');
-const I18N = folder('i18n');
-const THEME_PREFERENCE = folder('theme');
-const BOOTSTRAP = folder('bootstrap');
-const HOOKS = folder('hooks');
-const HOOKS_EXCEPT_COLOR_SCHEME = String.raw`${PROJECT}hooks(?!/use-color-scheme(?:\.ts)?$)(?:/|$)`;
-const UTILS = folder('utils');
-const CONSTANTS = folder('constants');
-const THEME = file('constants/theme');
-const CONFIG = file('constants/config');
+const NEWS_SCREEN = nested('presentation', 'screens/news');
+const SETTINGS_SCREEN = nested('presentation', 'screens/settings');
+const COMPONENTS = nested('presentation', 'components');
+const I18N = nested('presentation', 'i18n');
+// presentation/theme/ holds theme.ts, with the colors and the layout measures, and the theme provider.
+const THEME_FOLDER = nested('presentation', 'theme');
+const THEME = String.raw`${inside('presentation')}theme/theme(?:\.\w+)*$`;
+const THEME_PREFERENCE = String.raw`${inside('presentation')}theme(?:/(?!theme(?:\.\w+)*$)|$)`;
+// The same two, as a file of presentation/theme/ imports them.
+const THEME_SIBLING = String.raw`^\./theme(?:\.\w+)*$`;
+const THEME_PREFERENCE_SIBLING = String.raw`^\./(?!theme(?:\.\w+)*$)`;
+const BOOTSTRAP = nested('presentation', 'bootstrap');
+const HOOKS = nested('presentation', 'hooks');
+const HOOKS_EXCEPT_COLOR_SCHEME = String.raw`${inside('presentation')}hooks(?!/use-color-scheme(?:\.ts)?$)(?:/|$)`;
+const PRESENTATION_UTILS = nested('presentation', 'utils');
+const PROJECT_EXCEPT_CONFIG = String.raw`^(?!(?:@/data/|\./)config(?:\.\w+)*$)(?:@/|\.\.?/)`;
+const PROJECT_EXCEPT_DATA_UTILS = String.raw`^(?!@/data/utils/|\./|(?:\.\./)+(?:data/)?utils/)(?:@/|\.\.?/)`;
 const REACT_LIBRARY = String.raw`^react(?:/|$)`;
 const REACT = String.raw`^react(?:-native)?(?:/|$)`;
 const PLATFORM_LIBRARIES = [String.raw`^react-native(?:[-/]|$)`, String.raw`^@react-native`, String.raw`^expo(?:[-/]|$)`];
@@ -45,34 +51,35 @@ const forbid = (message, paths) => ({ regex: paths.join('|'), message });
 const NO_REACT = forbid('The data layer and the container must not depend on React.', [REACT]);
 
 const SERVICE_FORBIDDEN = forbid(
-  'Services may import only DTOs, other services, constants/config and utils.',
-  [
-    APP,
-    DATA_REPOSITORIES,
-    DOMAIN,
-    CONTAINER,
-    SCREENS,
-    COMPONENTS,
-    I18N,
-    THEME_PREFERENCE,
-    BOOTSTRAP,
-    HOOKS,
-    THEME,
-  ]
+  'Services may import only DTOs, other services, data/config and data/utils.',
+  [APP, DATA_REPOSITORIES, DOMAIN, DI, PRESENTATION]
 );
 
 const SCREEN_MESSAGE =
-  'Screens may import only their own view model and folder constants, models, components, i18n, theme and utils, never the folder of another screen.';
+  'Screens may import only their own view model and folder constants, models, components, i18n, the theme provider and presentation/utils, never the folder of another screen.';
 const SCREEN_FORBIDDEN = [
   APP,
   DATA,
   DOMAIN_EXCEPT_MODELS,
-  CONTAINER,
+  DI,
   BOOTSTRAP,
   HOOKS,
   THEME,
-  CONFIG,
   OTHER_SCREEN_RELATIVE,
+];
+
+const SUPPORT_MESSAGE =
+  'presentation/theme/theme, presentation/hooks and presentation/utils must not import routes, layers, the container, screens, components, i18n, the theme provider or bootstrap.';
+const SUPPORT_FORBIDDEN = [
+  APP,
+  DATA,
+  DOMAIN,
+  DI,
+  SCREENS,
+  COMPONENTS,
+  I18N,
+  THEME_PREFERENCE,
+  BOOTSTRAP,
 ];
 
 // When several blocks match a file, the last one sets the rule.
@@ -91,7 +98,7 @@ module.exports = defineConfig([
     forbid('Routes show a screen: they must not import the data layer, the domain or the container.', [
       DATA,
       DOMAIN,
-      CONTAINER,
+      DI,
     ])
   ),
   restrictImports(
@@ -100,16 +107,19 @@ module.exports = defineConfig([
       OUTSIDE_DOMAIN,
       APP,
       DATA,
-      CONTAINER,
-      SCREENS,
-      COMPONENTS,
-      I18N,
-      THEME_PREFERENCE,
-      BOOTSTRAP,
-      HOOKS,
-      UTILS,
-      CONSTANTS,
+      DI,
+      PRESENTATION,
     ])
+  ),
+  // Any file of the data layer; the blocks below set the rule of its folders.
+  restrictImports(
+    ['data/**'],
+    forbid('The data layer must not import routes, the container or the presentation.', [
+      APP,
+      DI,
+      PRESENTATION,
+    ]),
+    NO_REACT
   ),
   restrictImports(['data/services/**'], SERVICE_FORBIDDEN, NO_REACT),
   // The browser service opens URLs with the platform APIs of react-native.
@@ -121,10 +131,20 @@ module.exports = defineConfig([
   restrictImports(
     ['data/repositories/**'],
     forbid(
-      'Repositories may import only services, DTOs, the domain, the other files of data/repositories, constants/config and utils.',
-      [APP, CONTAINER, SCREENS, COMPONENTS, I18N, THEME_PREFERENCE, BOOTSTRAP, HOOKS, THEME]
+      'Repositories may import only services, DTOs, the domain, the other files of data/repositories, data/config and data/utils.',
+      [APP, DI, PRESENTATION]
     ),
     NO_REACT
+  ),
+  restrictImports(
+    ['data/config.ts', 'data/config.test.ts'],
+    forbid('data/config must not import other modules of the project.', [PROJECT_EXCEPT_CONFIG])
+  ),
+  restrictImports(
+    ['data/utils/**'],
+    forbid('data/utils may import only its own files, no other module of the project.', [
+      PROJECT_EXCEPT_DATA_UTILS,
+    ])
   ),
   restrictImports(
     ['data/services/**/*-dto.ts', 'domain/models/**/*-model.ts'],
@@ -133,37 +153,41 @@ module.exports = defineConfig([
     ])
   ),
   restrictImports(
-    ['container.ts'],
-    forbid('The container may import only the data layer and the domain.', [
-      APP,
-      SCREENS,
-      COMPONENTS,
-      I18N,
-      THEME_PREFERENCE,
-      BOOTSTRAP,
-      HOOKS,
-      UTILS,
-      CONSTANTS,
-    ]),
+    ['di/**'],
+    forbid('The container may import only the data layer and the domain.', [APP, PRESENTATION]),
     NO_REACT
   ),
-  restrictImports(['screens/**'], forbid(SCREEN_MESSAGE, SCREEN_FORBIDDEN)),
-  restrictImports(['screens/news/**'], forbid(SCREEN_MESSAGE, [...SCREEN_FORBIDDEN, SETTINGS_SCREEN])),
-  restrictImports(['screens/settings/**'], forbid(SCREEN_MESSAGE, [...SCREEN_FORBIDDEN, NEWS_SCREEN])),
+  // Any file of the presentation; the blocks below set the rule of its folders.
+  restrictImports(
+    ['presentation/**'],
+    forbid('The presentation must not import routes, the data layer, the container or bootstrap.', [
+      APP,
+      DATA,
+      DI,
+      BOOTSTRAP,
+    ])
+  ),
+  restrictImports(['presentation/screens/**'], forbid(SCREEN_MESSAGE, SCREEN_FORBIDDEN)),
+  restrictImports(
+    ['presentation/screens/news/**'],
+    forbid(SCREEN_MESSAGE, [...SCREEN_FORBIDDEN, SETTINGS_SCREEN])
+  ),
+  restrictImports(
+    ['presentation/screens/settings/**'],
+    forbid(SCREEN_MESSAGE, [...SCREEN_FORBIDDEN, NEWS_SCREEN])
+  ),
   // After the screen blocks, so that a view model keeps its own rule.
   restrictImports(
-    ['screens/**/use-*-view-model.ts'],
-    forbid('View models may import only the container, the domain, i18n, utils and React.', [
+    ['presentation/screens/**/use-*-view-model.ts'],
+    forbid('View models may import only the container, the domain, i18n, presentation/utils and React.', [
       APP,
       DATA,
       SCREENS,
       SCREENS_RELATIVE,
       COMPONENTS,
-      THEME_PREFERENCE,
+      THEME_FOLDER,
       BOOTSTRAP,
       HOOKS,
-      THEME,
-      CONFIG,
     ]),
     forbid(
       'View models must not use platform libraries: platform effects belong to the services, behind a use case.',
@@ -171,34 +195,34 @@ module.exports = defineConfig([
     )
   ),
   restrictImports(
-    ['components/**'],
+    ['presentation/components/**'],
     forbid(
-      'UI components may import only other components, constants/theme, hooks and UI libraries: data and texts arrive via props.',
+      'UI components may import only other components, presentation/theme/theme, the theme hooks and UI libraries: data and texts arrive via props.',
       [
         APP,
         DATA,
         DOMAIN,
-        CONTAINER,
+        DI,
         SCREENS,
         I18N,
         THEME_PREFERENCE,
         BOOTSTRAP,
-        UTILS,
-        CONFIG,
+        PRESENTATION_UTILS,
       ]
     )
   ),
   restrictImports(
-    ['i18n/**'],
+    ['presentation/i18n/**'],
     forbid(
       'i18n may import only its own files, the container, the domain, React and platform libraries.',
-      [APP, DATA, SCREENS, COMPONENTS, THEME_PREFERENCE, BOOTSTRAP, HOOKS, UTILS, THEME, CONFIG]
+      [APP, DATA, SCREENS, COMPONENTS, THEME_FOLDER, BOOTSTRAP, HOOKS, PRESENTATION_UTILS]
     )
   ),
+  // presentation/theme/theme.ts and its test take the rule of their own block, further down.
   restrictImports(
-    ['theme/**'],
+    ['presentation/theme/**'],
     forbid(
-      'theme may import only its own files, the container, the domain, React, platform libraries and the color scheme context of hooks/use-color-scheme.',
+      'The theme provider may import only the container, the domain, React, platform libraries and the color scheme context of presentation/hooks/use-color-scheme, not presentation/theme/theme.',
       [
         APP,
         DATA,
@@ -207,34 +231,23 @@ module.exports = defineConfig([
         I18N,
         BOOTSTRAP,
         HOOKS_EXCEPT_COLOR_SCHEME,
-        UTILS,
+        PRESENTATION_UTILS,
         THEME,
-        CONFIG,
+        THEME_SIBLING,
       ]
     )
   ),
   restrictImports(
-    ['bootstrap/**'],
+    ['presentation/bootstrap/**'],
     forbid(
       'bootstrap may import only its own files, the i18n and theme providers, the container, the domain, React and platform libraries.',
-      [APP, DATA, SCREENS, COMPONENTS, HOOKS, UTILS, THEME, CONFIG]
+      [APP, DATA, SCREENS, COMPONENTS, HOOKS, PRESENTATION_UTILS, THEME]
     )
   ),
+  restrictImports(['presentation/hooks/**', 'presentation/utils/**'], forbid(SUPPORT_MESSAGE, SUPPORT_FORBIDDEN)),
+  // From theme.ts, the other files of its folder belong to the theme provider.
   restrictImports(
-    ['constants/**', 'utils/**', 'hooks/**'],
-    forbid(
-      'constants, utils and hooks must not import routes, layers, the container, i18n, theme or bootstrap.',
-      [
-        APP,
-        DATA,
-        DOMAIN,
-        CONTAINER,
-        SCREENS,
-        COMPONENTS,
-        I18N,
-        THEME_PREFERENCE,
-        BOOTSTRAP,
-      ]
-    )
+    ['presentation/theme/theme.ts', 'presentation/theme/theme.test.ts'],
+    forbid(SUPPORT_MESSAGE, [...SUPPORT_FORBIDDEN, THEME_PREFERENCE_SIBLING])
   ),
 ]);
