@@ -78,7 +78,7 @@ function makeItem(slug: string, onPress: () => void = jest.fn()): NewsCardItem {
 }
 
 const GROUPS: NewsCardGroup[] = [
-  { key: 'frontPages', title: 'Prime pagine', items: [makeItem('first'), makeItem('second')] },
+  { key: 'frontPages', title: 'Notizie principali', items: [makeItem('first'), makeItem('second')] },
   { key: 'latestAnsa', title: 'Ultime da ANSA', items: [makeItem('third')] },
 ];
 
@@ -140,7 +140,7 @@ describe('NewsScreen', () => {
     expect(screen.getByText('Caricamento notizie...')).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: 'Italia' })).toBeSelected();
     expect(screen.getByRole('button', { name: 'USA' })).toBeOnTheScreen();
-    expect(screen.queryByText('Prime pagine')).toBeNull();
+    expect(screen.queryByText('Notizie principali')).toBeNull();
     expect(screen.queryByText(/^Ultimo controllo/)).toBeNull();
   });
 
@@ -168,7 +168,7 @@ describe('NewsScreen', () => {
   it('renders the groups of cards under their headings, the update label and the selected chip', async () => {
     await renderScreen();
 
-    expect(screen.getByRole('header', { name: 'Prime pagine' })).toBeOnTheScreen();
+    expect(screen.getByRole('header', { name: 'Notizie principali' })).toBeOnTheScreen();
     expect(screen.getByRole('header', { name: 'Ultime da ANSA' })).toBeOnTheScreen();
     expect(screen.getAllByRole('link')).toHaveLength(3);
     expect(screen.getByText('Title third')).toBeOnTheScreen();
@@ -199,7 +199,7 @@ describe('NewsScreen', () => {
   it('keeps the list on screen when a load failed with articles', async () => {
     await renderScreen({ status: 'error', errorMessage: 'Il server non risponde. Riprova.' });
 
-    expect(screen.getByRole('header', { name: 'Prime pagine' })).toBeOnTheScreen();
+    expect(screen.getByRole('header', { name: 'Notizie principali' })).toBeOnTheScreen();
     expect(screen.queryByText('Il server non risponde. Riprova.')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Riprova' })).toBeNull();
   });

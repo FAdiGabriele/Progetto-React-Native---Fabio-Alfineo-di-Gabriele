@@ -635,7 +635,7 @@ describe('useNewsViewModel', () => {
       { key: 'usa', label: 'USA' },
     ]);
     expect(current.groups.map((group) => [group.key, group.title, group.items.length])).toEqual([
-      ['frontPages', 'Prime pagine', 2],
+      ['frontPages', 'Notizie principali', 2],
       ['latestAnsa', 'Ultime da ANSA', 1],
     ]);
     expect(current.groups[0].items[0]).toEqual({
@@ -745,7 +745,7 @@ describe('useNewsViewModel', () => {
     const { result } = await renderHook(() => useNewsViewModel(USE_CASES));
     await waitFor(() => expect(result.current.status).toBe('error'));
 
-    expect(result.current.groups.map((group) => group.title)).toEqual(['Prime pagine', 'Ultime da ANSA']);
+    expect(result.current.groups.map((group) => group.title)).toEqual(['Notizie principali', 'Ultime da ANSA']);
     expect(result.current.updatedAtLabel).toBe('Ultimo controllo il 29 set 2026, 10:00');
     expect(result.current.notice).toBe(NETWORK_MESSAGE);
     expect(result.current.errorMessage).toBe(NETWORK_MESSAGE);
@@ -798,7 +798,7 @@ describe('useNewsViewModel', () => {
     });
     expect(moreRequest(0).groups).toBe(FIRST_PAGE.groups);
     expect(result.current.groups.map((group) => [group.key, group.title])).toEqual([
-      ['frontPages', 'Prime pagine'],
+      ['frontPages', 'Notizie principali'],
       ['latestAnsa', 'Ultime da ANSA'],
       ['moreNews', 'Altre notizie'],
     ]);

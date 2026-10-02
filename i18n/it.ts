@@ -17,7 +17,7 @@ export const it = {
   'settings.footer': 'Sviluppato da Fabio Alfineo di Gabriele',
   'categories.italy': 'Italia',
   'categories.usa': 'USA',
-  'groups.frontPages': 'Prime pagine',
+  'groups.frontPages': 'Notizie principali',
   'groups.latestAnsa': 'Ultime da ANSA',
   'groups.topHeadlines': 'Notizie principali',
   'groups.moreNews': 'Altre notizie',

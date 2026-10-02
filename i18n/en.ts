@@ -19,7 +19,7 @@ export const en: Dictionary = {
   'settings.footer': 'Developed by Fabio Alfineo di Gabriele',
   'categories.italy': 'Italy',
   'categories.usa': 'USA',
-  'groups.frontPages': 'Front pages',
+  'groups.frontPages': 'Top headlines',
   'groups.latestAnsa': 'Latest from ANSA',
   'groups.topHeadlines': 'Top headlines',
   'groups.moreNews': 'More news',
