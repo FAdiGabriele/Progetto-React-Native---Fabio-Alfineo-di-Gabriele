@@ -40,7 +40,6 @@ function makeDto(overrides: Partial<NewsApiArticleDto> = {}): NewsApiArticleDto 
   };
 }
 
-// Shapes outside the DTO type, to check that the mapper tolerates what the API might send.
 function asDto(value: unknown): NewsApiArticleDto {
   return value as NewsApiArticleDto;
 }

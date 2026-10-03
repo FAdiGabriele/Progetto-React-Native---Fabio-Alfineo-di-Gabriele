@@ -4,22 +4,22 @@ export const Colors = {
     background: '#fff',
     tint: '#0a7ea4',
     icon: '#687076',
-    card: '#fff', // Card and unselected chip background, same white as background
-    border: '#D7DBDF', // Card and unselected chip border (Radix slate 7)
-    textSecondary: '#687076', // Card description, date and author (Radix slate 11)
-    placeholder: '#F1F3F5', // Image placeholder background (Radix slate 3)
-    onTint: '#fff', // Text on a tint background, like the selected chip
+    card: '#fff',
+    border: '#D7DBDF', // Radix slate 7
+    textSecondary: '#687076', // Radix slate 11
+    placeholder: '#F1F3F5', // Radix slate 3
+    onTint: '#fff',
   },
   dark: {
     text: '#ECEDEE',
     background: '#151718',
     tint: '#fff',
     icon: '#9BA1A6',
-    card: '#202425', // Card and unselected chip background (Radix slateDark 3)
-    border: '#3A3F42', // Card and unselected chip border (Radix slateDark 7)
-    textSecondary: '#9BA1A6', // Card description, date and author (Radix slateDark 11)
-    placeholder: '#2B2F31', // Image placeholder background (Radix slateDark 5)
-    onTint: '#151718', // Text on a tint background, like the selected chip (Radix slateDark 1)
+    card: '#202425', // Radix slateDark 3
+    border: '#3A3F42', // Radix slateDark 7
+    textSecondary: '#9BA1A6', // Radix slateDark 11
+    placeholder: '#2B2F31', // Radix slateDark 5
+    onTint: '#151718', // Radix slateDark 1
   },
 };
 

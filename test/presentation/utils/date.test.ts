@@ -95,7 +95,6 @@ describe('isToday', () => {
   });
 
   it('compares the local day of Europe/Rome, not the UTC day', () => {
-    // Local midnight in Rome is still the previous day in UTC.
     expect(startOfToday.getUTCDate()).not.toBe(startOfToday.getDate());
     expect(isToday(startOfToday)).toBe(true);
     const lastUtcInstantOfYesterday = new Date(startOfToday.getTime() - 1);

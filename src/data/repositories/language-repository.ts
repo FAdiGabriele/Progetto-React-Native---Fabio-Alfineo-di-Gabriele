@@ -22,5 +22,4 @@ async function saveLanguage(language: Language): Promise<void> {
   await writeLanguage(language);
 }
 
-/** The language of the interface saved on the device. */
 export const languageRepository: LanguageRepository = { getSavedLanguage, saveLanguage };

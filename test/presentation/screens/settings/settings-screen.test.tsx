@@ -93,7 +93,6 @@ function radioGroup(name: string) {
   return groups[0];
 }
 
-// The accessibility labels of the options of a group, all or only the checked ones.
 function optionLabels(group: string, options: { checked?: boolean } = {}): string[] {
   return within(radioGroup(group))
     .getAllByRole('radio', options)

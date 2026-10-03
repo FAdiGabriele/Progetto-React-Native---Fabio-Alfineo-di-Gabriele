@@ -14,10 +14,9 @@ import type {
 type FixtureService = typeof import('@/data/services/news-fixture-service');
 
 /**
- * The fixture service in fixture mode, `undefined` otherwise. The variable is read here, not in
- * `src/data/config`, and the service is required behind it instead of imported: a production
- * build inlines the variable and drops the branch never taken, so without fixture mode the
- * fixtures stay out of the bundle.
+ * The variable is read here, not in `src/data/config`, and the fixture service is required
+ * behind it instead of imported: a production build inlines the variable and drops the branch
+ * never taken, so without fixture mode the fixtures stay out of the bundle.
  */
 function requireFixtureService(): FixtureService | undefined {
   if (process.env.EXPO_PUBLIC_NEWS_USE_FIXTURES === 'true') {
@@ -120,14 +119,13 @@ async function send(url: string, signal?: AbortSignal): Promise<RawResponse> {
   }
 }
 
-// The error fetch rejects with when its signal is aborted.
+// An error like the one fetch rejects with when its signal is aborted.
 function createAbortError(): Error {
   const error = new Error('The operation was aborted.');
   error.name = 'AbortError';
   return error;
 }
 
-// Resolves after the retry pause, or rejects like fetch as soon as the caller aborts `signal`.
 function waitBeforeRetry(signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     const onAbort = () => {
@@ -210,11 +208,10 @@ function parseResponse({ status, ok, body }: RawResponse): NewsApiPageDto {
 }
 
 /**
- * Fetches one page of a NewsAPI request: its articles and the total number of results.
- * A request that fails on the network is sent once more, after a pause. Rejects with a
- * NewsApiServiceError, or with an abort error when the caller aborts `signal`: the one of
- * fetch, unchanged, or one like it during the pause before the retry. In fixture mode the page
- * comes from `src/data/services/fixtures/`, without any request and without checking the key.
+ * Fetches one page of a NewsAPI request. A request that fails on the network is sent once
+ * more, after a pause. Rejects with a NewsApiServiceError, or with an abort error when the
+ * caller aborts `signal`. In fixture mode the page comes from `src/data/services/fixtures/`,
+ * without any request and without checking the key.
  */
 export async function getArticles(
   request: NewsApiRequestDto,

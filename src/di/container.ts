@@ -1,8 +1,4 @@
-/**
- * Composition root: the only module outside the data layer that knows it. It builds the use
- * cases of the domain with the repositories and services that implement its ports, and hands
- * out the repositories of the saved preferences and of the app information as their ports.
- */
+/** Composition root: the only module outside the data layer that knows it. */
 import { appInfoRepository as appInfoRepositoryImpl } from '@/data/repositories/app-info-repository';
 import { languageRepository as languageRepositoryImpl } from '@/data/repositories/language-repository';
 import { newsRepository } from '@/data/repositories/news-repository';
@@ -15,7 +11,6 @@ import { createLoadMoreNews } from '@/domain/use-cases/load-more-news';
 import { createLoadSectionNews } from '@/domain/use-cases/load-section-news';
 import { createOpenArticle } from '@/domain/use-cases/open-article';
 
-/** Use cases of the news screen. */
 export const newsUseCases = {
   loadSectionNews: createLoadSectionNews(newsRepository),
   loadMoreNews: createLoadMoreNews(newsRepository),

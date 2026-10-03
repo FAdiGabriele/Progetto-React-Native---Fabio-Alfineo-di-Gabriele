@@ -1,4 +1,3 @@
-/** Italian texts of the interface; its keys are the keys of every dictionary. */
 export const it = {
   'app.name': 'News App',
   'news.updatedAtTime': 'Ultimo controllo alle {time}',
@@ -41,5 +40,5 @@ export const it = {
 
 export type TranslationKey = keyof typeof it;
 
-/** A dictionary has exactly the keys of the Italian one, so a missing or extra text fails the type check. */
+/** Exactly the keys of the Italian dictionary: a missing or extra text fails the type check. */
 export type Dictionary = Record<TranslationKey, string>;

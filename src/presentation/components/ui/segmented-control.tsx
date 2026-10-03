@@ -16,7 +16,6 @@ export type SegmentedControlProps<Key extends string = string> = {
   accessibilityLabel: string;
 };
 
-/** A choice among a few options shown side by side, exactly one of them selected. */
 export function SegmentedControl<Key extends string>({
   options,
   selectedKey,

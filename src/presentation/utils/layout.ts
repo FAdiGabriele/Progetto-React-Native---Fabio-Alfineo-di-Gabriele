@@ -3,9 +3,9 @@ import { Layout } from '@/presentation/theme/theme';
 export type NewsLayout = { columns: number; horizontalMargin: number };
 
 /**
- * Columns and horizontal margin of the news screen for a window width: one column
- * below the desktop threshold, otherwise at least the minimum number of columns,
- * plus one for every extra minimum card width that fits between the margins.
+ * Columns and horizontal margin of the news screen for a window width: one column below the
+ * desktop threshold, otherwise as many columns of the minimum card width, gaps included, as fit
+ * between the margins, and never fewer than the minimum number of columns.
  */
 export function getNewsLayout(width: number): NewsLayout {
   if (!Number.isFinite(width) || width < Layout.desktopMinWidth) {

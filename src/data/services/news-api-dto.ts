@@ -1,5 +1,3 @@
-/** Data as NewsAPI sends and receives it: these types never leave the data layer. */
-
 export type NewsApiArticleDto = {
   source: { id: string | null; name: string };
   author: string | null;
@@ -11,7 +9,6 @@ export type NewsApiArticleDto = {
   content: string | null; // truncated to 200 characters by the API
 };
 
-/** Page of a successful response: the total across all pages and the articles of this one. */
 export type NewsApiPageDto = { totalResults: number; articles: NewsApiArticleDto[] };
 
 export type NewsApiResponseDto =
@@ -31,8 +28,8 @@ export type NewsApiRequestDto = (
 ) & { page?: number }; // absent for the first page
 
 /**
- * Last saved list of a news section: the article DTOs of every request of its first page,
- * in request order, and when they were saved.
+ * Last saved list of a news section: the article DTOs of each request of its first page, in
+ * section order.
  */
 export type NewsCacheEntryDto = {
   savedAt: string; // ISO 8601

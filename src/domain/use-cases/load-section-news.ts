@@ -3,7 +3,7 @@ import type { NewsRepository } from '@/domain/repositories/news-repository';
 
 export type LoadSectionNewsRequest = {
   section: NewsSectionKey;
-  /** Whether the caller already shows articles of the section, as during a refresh. */
+  /** Whether the caller already shows articles of the section. */
   hasArticles: boolean;
   signal?: AbortSignal;
 };

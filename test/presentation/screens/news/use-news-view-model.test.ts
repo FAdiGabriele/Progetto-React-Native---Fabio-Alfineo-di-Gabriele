@@ -18,7 +18,6 @@ import {
   type NewsUseCases,
 } from '@/presentation/screens/news/use-news-view-model';
 
-// Keeps the data layer out of the tests; the hook receives fake use cases instead.
 jest.mock('@/di/container', () => ({
   newsUseCases: { loadSectionNews: jest.fn(), loadMoreNews: jest.fn(), openArticle: jest.fn() },
 }));

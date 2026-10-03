@@ -22,5 +22,4 @@ async function saveTheme(preference: ThemePreference): Promise<void> {
   await writeTheme(preference);
 }
 
-/** The theme preference saved on the device. */
 export const themeRepository: ThemeRepository = { getSavedTheme, saveTheme };

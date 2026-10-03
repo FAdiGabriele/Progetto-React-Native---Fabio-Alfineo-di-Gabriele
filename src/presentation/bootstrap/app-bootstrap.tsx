@@ -12,7 +12,7 @@ type SavedPreferences = { theme: ThemePreference | null; language: Language | nu
 // Called while the module loads, before the first render: later the splash screen may be gone.
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
-// The two reads start together; a read that fails counts as nothing saved.
+// A read that fails counts as nothing saved.
 async function readSavedPreferences(): Promise<SavedPreferences> {
   const [theme, language] = await Promise.all([
     themeRepository.getSavedTheme().catch(() => null),
@@ -22,9 +22,8 @@ async function readSavedPreferences(): Promise<SavedPreferences> {
 }
 
 /**
- * Startup of the app: reads the saved theme preference and the saved language together while
- * the native splash screen stays visible, then renders its children inside the theme and
- * language providers and hides the splash screen, so the first screen already has both.
+ * Keeps the native splash screen visible until the saved theme preference and language are
+ * read, so the first screen already renders with both.
  */
 export function AppBootstrap({ children }: { children: ReactNode }) {
   const [preferences, setPreferences] = useState<SavedPreferences | null>(null);

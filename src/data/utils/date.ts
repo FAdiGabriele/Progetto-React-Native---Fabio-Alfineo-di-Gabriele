@@ -1,4 +1,4 @@
-// Date and time with an optional fraction of a second, followed by "Z" or a "+hh:mm" offset.
+// Date and time with optional seconds and fraction, then "Z" or a "+hh:mm" or "-hh:mm" offset.
 const ISO_DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/;
 
 function isValidDate(date: Date): boolean {

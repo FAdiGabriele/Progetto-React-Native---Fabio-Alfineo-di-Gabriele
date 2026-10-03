@@ -34,7 +34,6 @@ jest.mock('@/data/services/news-cache-service', () => ({
 
 type RequestName = 'frontPages' | 'latestAnsa' | 'topHeadlines' | 'italyMore' | 'usaMore';
 
-// What getArticles does for a request: resolve with a page, reject with an error, or follow a promise.
 type Reply = NewsApiPageDto | Error | Promise<NewsApiPageDto>;
 
 type Deferred<T> = { promise: Promise<T>; resolve: (value: T) => void; reject: (error: unknown) => void };
@@ -68,13 +67,11 @@ const REQUESTS: Record<RequestName, NewsApiRequestDto> = {
   usaMore: moreRequestOf('usa'),
 };
 
-// The failure, the kind of its NewsError and, for a configuration error, the warning it logs.
 type ServiceFailure = { label: string; error: NewsApiServiceError; kind: NewsErrorKind; warning?: string };
 
 const AUTH_HINT = 'Check EXPO_PUBLIC_NEWS_API_KEY in the .env file and restart the development server.';
 const BAD_REQUEST_HINT = 'Check the requests in data/repositories/news-section-requests.ts.';
 
-// An HTTP failure with its status and, when given, its NewsAPI code, labelled by both.
 function httpFailure(status: number, code: string | undefined, kind: NewsErrorKind, warning?: string): ServiceFailure {
   const label = code === undefined ? `HTTP ${status} without a code` : `HTTP ${status} with code ${code}`;
   return { label, error: new NewsApiServiceError('http', { status, code }), kind, warning };
@@ -147,11 +144,9 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
-// The warnings logged so far, one array of arguments per call.
 const warnings = () => consoleWarn.mock.calls;
 const expectedWarnings = (warning: string | undefined) => (warning === undefined ? [] : [[warning]]);
 
-// The name of a request of the sections, whatever its page.
 function nameOf(request: NewsApiRequestDto): RequestName {
   const { page, ...withoutPage } = request;
   const key = JSON.stringify(withoutPage);
@@ -221,7 +216,6 @@ async function newsErrorOf(promise: Promise<unknown>): Promise<NewsError> {
   return error as NewsError;
 }
 
-// [key, number of articles] of every group.
 function shapeOf(groups: readonly NewsGroup[]): [string, number][] {
   return groups.map((group): [string, number] => [group.key, group.articles.length]);
 }
@@ -230,14 +224,12 @@ function idsOf(groups: readonly NewsGroup[]): string[] {
   return groups.flatMap((group) => group.articles.map((article) => article.id));
 }
 
-// The section key and the entry of the only writeEntry call.
 function savedEntry(): { sectionKey: string; entry: NewsCacheEntryDto } {
   expect(writeEntryMock).toHaveBeenCalledTimes(1);
   const [sectionKey, entry] = writeEntryMock.mock.calls[0];
   return { sectionKey, entry };
 }
 
-// The pages of the more news that a section asks, from page 1 until the cursor ends.
 async function visitMorePages(sectionKey: NewsSectionKey): Promise<number[]> {
   const visited: number[] = [];
   let cursor: NewsPageCursor | undefined = { page: 1 };

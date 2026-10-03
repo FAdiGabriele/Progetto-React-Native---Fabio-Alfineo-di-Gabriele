@@ -38,7 +38,7 @@ function format(formatter: Intl.DateTimeFormat, date: Date): string {
   return parts
     .map((part) => (twoDigitHour && part.type === 'hour' ? part.value.padStart(2, '0') : part.value))
     .join('')
-    // Some ICU versions put a narrow no-break space before "PM": normalized to a plain space.
+    // Some ICU versions put a narrow or a plain no-break space before "PM": both become a space.
     .replace(/[  ]/g, ' ');
 }
 
@@ -65,7 +65,6 @@ export function formatTime(date: Date | undefined, locale: string): string | und
   return format(getFormatter(timeFormatters, locale, TIME_FORMAT_OPTIONS), date);
 }
 
-/** Whether the date falls on the current day of the device time zone; false for an invalid date. */
 export function isToday(date: Date): boolean {
   if (!isValidDate(date)) {
     return false;

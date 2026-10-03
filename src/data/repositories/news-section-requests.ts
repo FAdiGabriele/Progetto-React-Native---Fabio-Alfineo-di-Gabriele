@@ -2,17 +2,15 @@ import { NEWS_MORE_PAGE_SIZE, NEWS_PAGE_SIZE } from '@/data/config';
 import type { NewsApiRequestDto } from '@/data/services/news-api-dto';
 import type { NewsGroupKey, NewsSectionKey } from '@/domain/models/news-model';
 
-/** A request of a section and the group of the list that shows its articles. */
 export type NewsSectionRequest = { group: NewsGroupKey; request: NewsApiRequestDto };
 
 export type NewsSectionRequests = {
   /** Requests of the first page, in the order of their groups in the list; they have no later pages. */
   requests: NewsSectionRequest[];
-  /** Request of the more news at the end of the list, one page at a time; without it the section loads no more news. */
+  /** Paged request at the end of the list; without it the section loads no more news. */
   moreRequest?: NewsSectionRequest;
 };
 
-/** The NewsAPI requests of every news section. */
 export const NEWS_SECTION_REQUESTS: Record<NewsSectionKey, NewsSectionRequests> = {
   italy: {
     requests: [

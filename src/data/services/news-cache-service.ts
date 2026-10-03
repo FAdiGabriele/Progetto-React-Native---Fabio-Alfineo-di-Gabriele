@@ -34,7 +34,6 @@ export async function readEntry(sectionKey: string): Promise<NewsCacheEntryDto |
   }
 }
 
-/** Saves the entry of a news section; a write failure is left to the caller. */
 export function writeEntry(sectionKey: string, entry: NewsCacheEntryDto): Promise<void> {
   return AsyncStorage.setItem(STORAGE_KEY_PREFIX + sectionKey, JSON.stringify(entry));
 }

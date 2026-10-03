@@ -1,15 +1,8 @@
-/** Domain types of the news: what use cases, view models and screens work with. */
-
 /** Keys of the news sections, in the order of the category bar; the first one is selected at startup. */
 export const NEWS_SECTION_KEYS = ['italy', 'usa'] as const;
 
-/** Key of a news section: the category of the news that the user picks. */
 export type NewsSectionKey = (typeof NEWS_SECTION_KEYS)[number];
 
-/**
- * Key of a group of the news list, the block of cards that shows the articles of one request
- * of a section under its own heading.
- */
 export type NewsGroupKey = 'frontPages' | 'latestAnsa' | 'topHeadlines' | 'moreNews';
 
 export type Article = {
@@ -20,7 +13,7 @@ export type Article = {
   imageUrl?: string;
   sourceName: string;
   author?: string;
-  publishedAt?: Date; // absent when the API value cannot be parsed
+  publishedAt?: Date; // absent when the API value is missing or cannot be parsed
 };
 
 /**
@@ -33,11 +26,6 @@ export type NewsGroup<Key extends string = NewsGroupKey> = {
   articles: Article[]; // at least one: a request left without articles has no group
 };
 
-/**
- * One page of a news section: its groups in section order, without empty ones, with the
- * cursor of the next page of its more-news request and, for a first page whose requests did
- * not all succeed, the error of the failed one.
- */
 export type NewsPage = {
   groups: NewsGroup[];
   next?: NewsPageCursor; // absent when the section has no more-news request or has exhausted it
@@ -50,7 +38,7 @@ export type NewsPageCursor = {
   page: number; // next page of the more-news request of the section, from 1
 };
 
-/** Last saved list of a news section, one group per request of its first page, and when it was saved. */
+/** Last saved list of a news section: the groups of its first page, without the more news. */
 export type SavedNews = {
   groups: NewsGroup[];
   savedAt: Date;
@@ -76,7 +64,6 @@ export class NewsError extends Error {
     this.kind = kind;
   }
 
-  /** The error itself when it already is a NewsError, an unknown one otherwise. */
   static from(error: unknown): NewsError {
     return error instanceof NewsError ? error : new NewsError('unknown');
   }

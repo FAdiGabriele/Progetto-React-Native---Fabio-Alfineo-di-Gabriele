@@ -95,7 +95,6 @@ async function letRejectionsSurface(): Promise<void> {
   });
 }
 
-// Waits for the events that the native module sends after a call.
 async function letNativeEventsArrive(): Promise<void> {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));

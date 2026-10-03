@@ -70,7 +70,6 @@ function toNewsErrorKind(error: NewsApiServiceError): NewsErrorKind {
   }
 }
 
-// What to check for the errors that only a developer can fix.
 const DEVELOPER_HINTS: Partial<Record<NewsErrorKind, string>> = {
   auth: 'Check EXPO_PUBLIC_NEWS_API_KEY in the .env file and restart the development server.',
   badRequest: 'Check the requests in data/repositories/news-section-requests.ts.',
@@ -99,7 +98,7 @@ function toNewsError(error: unknown): NewsError {
   return newsError;
 }
 
-// Only errors that are not transport errors can be cancellations.
+// A NewsApiServiceError is never a cancellation, even when `signal` was aborted after it.
 function isCancellation(error: unknown, signal?: AbortSignal): boolean {
   if (error instanceof NewsApiServiceError) {
     return false;
@@ -107,12 +106,10 @@ function isCancellation(error: unknown, signal?: AbortSignal): boolean {
   return signal?.aborted === true || (error instanceof Error && error.name === 'AbortError');
 }
 
-// A cancellation is rethrown unchanged; any other error becomes a NewsError.
 function toThrowable(error: unknown, signal?: AbortSignal): unknown {
   return isCancellation(error, signal) ? error : toNewsError(error);
 }
 
-// The first page sends no page parameter.
 function withPage(request: NewsApiRequestDto, page: number): NewsApiRequestDto {
   return page === FIRST_PAGE ? request : { ...request, page };
 }
@@ -122,7 +119,6 @@ function hasMorePages(page: number, pageSize: number, totalResults: number): boo
   return received < totalResults && received < NEWS_MAX_RESULTS;
 }
 
-// The groups of the first page of a section: one per request, with its article DTOs.
 function toFirstPageGroups(section: NewsSectionRequests, requestArticles: readonly NewsApiArticleDto[][]) {
   return mapGroups(
     section.requests.map(({ group }, index) => ({ key: group, articles: requestArticles[index] }))
@@ -154,7 +150,6 @@ async function getFirstPage(sectionKey: NewsSectionKey, signal?: AbortSignal): P
     partialError = failure;
   }
 
-  // The article DTOs of every request, in section order; none for a failed request.
   const requestArticles = results.map((result) =>
     result.status === 'fulfilled' ? result.value.articles : []
   );
@@ -193,19 +188,10 @@ async function getMorePage(
 }
 
 /**
- * Fetches one page of a news section. Without a cursor it fetches the first page: the
- * requests of the section run in parallel with the same `signal` and the articles of the
- * successful ones form the groups of the page, one per request in section order, without
- * the empty ones; it rejects with a NewsError only when every request fails, translating the
- * error of the first one, while a page with some failed requests carries the translated
- * error of the first one in `partialError`. A first page with every request successful and
- * at least one article is saved as the last list of the section before being returned,
- * ignoring a failed save; a partial page leaves the saved list untouched. The cursor of the
- * result points to page 1 of the more-news request of the section, when it has one. With a
- * cursor it fetches that page of the more-news request alone, as the group of that request,
- * and returns the cursor of the following page, or none when the request is exhausted; a
- * failed request rejects with its NewsError, so a later call can retry the same page. A
- * cancellation requested through `signal` is rethrown unchanged.
+ * Fetches one page of a news section. The requests of a first page run in parallel: the error
+ * of the first failed one rejects the page when all of them fail and is its `partialError`
+ * otherwise. A first page without failures and with at least one article is saved as the last
+ * list of the section, ignoring a failed save.
  */
 async function getSectionArticles(
   sectionKey: NewsSectionKey,
@@ -218,9 +204,9 @@ async function getSectionArticles(
 }
 
 /**
- * Last saved list of a news section, with one group per request of its first page, or null
- * when there is none, its instant cannot be parsed, it was saved with a different list of
- * requests or no article survives the mapping.
+ * Last saved list of a news section, or null when there is none to show. The saved article
+ * DTOs are matched to the requests of the section by position, so a list saved with a
+ * different number of requests is discarded.
  */
 async function getSavedSectionArticles(sectionKey: NewsSectionKey): Promise<SavedNews | null> {
   const section = getSectionRequests(sectionKey);
@@ -236,5 +222,4 @@ async function getSavedSectionArticles(sectionKey: NewsSectionKey): Promise<Save
   return groups.length > 0 ? { groups, savedAt } : null;
 }
 
-/** The news of the sections from NewsAPI, with the last list of each section saved on the device. */
 export const newsRepository: NewsRepository = { getSectionArticles, getSavedSectionArticles };

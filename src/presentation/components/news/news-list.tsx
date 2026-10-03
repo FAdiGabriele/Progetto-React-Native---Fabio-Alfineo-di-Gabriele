@@ -20,7 +20,6 @@ import { useThemeColor } from '@/presentation/hooks/use-theme-color';
 
 export type NewsListItem = NewsCardProps & { id: string };
 
-/** Cards shown under one heading. */
 export type NewsListGroup = { key: string; title: string; items: NewsListItem[] };
 
 export type NewsListProps = {
@@ -29,11 +28,9 @@ export type NewsListProps = {
   horizontalMargin: number;
   refreshing: boolean;
   onRefresh: () => void;
-  /** Shows an activity indicator below the last card while a later page is loading. */
   loadingMore: boolean;
-  /** Called when the scroll reaches the end of the list; absent when there is nothing more to load. */
+  /** Absent when there is nothing more to load. */
   onEndReached?: () => void;
-  /** Label of the button shown below the last card, in place of the indicator, when a later page failed. */
   retryLabel: string;
   /** Loads again the later page that failed; absent when none did, and the button with it. */
   onRetry?: () => void;
@@ -43,7 +40,6 @@ export type NewsListProps = {
 // A row of the list: up to `columns` cards of one group, fewer in the last row of the group.
 type NewsListRow = { key: string; items: NewsListItem[] };
 
-// A section of the list is a group: its heading, then its rows.
 type NewsListSection = { key: string; title: string; first: boolean };
 
 type NewsListSectionData = SectionListData<NewsListRow, NewsListSection>;

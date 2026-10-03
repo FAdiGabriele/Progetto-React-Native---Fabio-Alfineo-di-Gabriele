@@ -45,7 +45,6 @@ const useViewModel = useNewsViewModel as jest.MockedFunction<typeof useNewsViewM
 
 type HostNode = { type: string; props: Record<string, unknown>; children: (HostNode | string)[] | null };
 
-// The host nodes of the rendered tree that satisfy the predicate, in depth-first order.
 function findHostNodes(predicate: (node: HostNode) => boolean): HostNode[] {
   const json = screen.toJSON();
   const roots = (Array.isArray(json) ? json : [json]).filter((node) => node !== null) as HostNode[];

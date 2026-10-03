@@ -12,7 +12,6 @@ export type LoadMoreNewsRequest = {
   section: NewsSectionKey;
   /** Groups of the list the caller shows: the more news are appended to them. */
   groups: NewsGroup[];
-  /** Cursor of the page to load. */
   cursor: NewsPageCursor;
   signal?: AbortSignal;
 };
@@ -31,9 +30,9 @@ export type LoadMoreNews = (request: LoadMoreNewsRequest) => Promise<LoadMoreNew
 /**
  * Builds the use case that loads the next page of the more news of a section and appends its
  * articles to the list, without duplicates. A page that adds nothing is followed at once by
- * the next one, until a page adds articles, fails or is the last: in that case the list comes
- * back as it was, the same array. A cancellation requested through `signal` is rethrown
- * unchanged.
+ * the next one, until a page adds articles, fails or is the last; when the last page adds
+ * nothing either, the list comes back as it was, the same array. A cancellation requested
+ * through `signal` is rethrown unchanged.
  */
 export function createLoadMoreNews(repository: NewsRepository): LoadMoreNews {
   return async ({ section, groups, cursor, signal }) => {

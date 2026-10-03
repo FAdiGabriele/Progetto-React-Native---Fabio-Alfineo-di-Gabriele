@@ -1,9 +1,6 @@
 import type { Article } from '@/domain/models/news-model';
 
-/**
- * Opens a URL for the user and resolves to whether it was opened: the port of the browser,
- * which the data layer implements.
- */
+/** Opens a URL for the user and resolves to whether it was opened. */
 export type UrlOpener = (url: string) => Promise<boolean>;
 
 export type OpenArticleOutcome = 'opened' | 'failed' | 'ignored';

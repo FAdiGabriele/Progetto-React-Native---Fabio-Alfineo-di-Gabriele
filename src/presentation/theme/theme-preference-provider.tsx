@@ -6,9 +6,7 @@ import type { Theme, ThemePreference } from '@/domain/models/theme-model';
 import { ColorSchemeContext } from '@/presentation/hooks/use-color-scheme';
 
 export type ThemePreferenceValue = {
-  /** Choice made in the settings: one of the two themes, or the theme of the device. */
   preference: ThemePreference;
-  /** Theme shown by the interface: the chosen one or, with the "system" choice, the one of the device. */
   theme: Theme;
   /** Applies the preference at once, then saves it; a failed save is ignored. */
   setPreference: (preference: ThemePreference) => void;
@@ -19,10 +17,8 @@ const DEFAULT_PREFERENCE: ThemePreference = 'system';
 const ThemePreferenceContext = createContext<ThemePreferenceValue | null>(null);
 
 /**
- * Provides the active theme to its children, starting from the saved preference read at
- * startup; without a valid saved value the app follows the theme of the device, also while
- * it changes. On Android and iOS the preference is also applied to the system elements,
- * such as alerts.
+ * Provides the active theme to its children. On Android and iOS the preference is also applied
+ * to the system elements, such as alerts.
  */
 export function ThemePreferenceProvider({
   initialPreference,

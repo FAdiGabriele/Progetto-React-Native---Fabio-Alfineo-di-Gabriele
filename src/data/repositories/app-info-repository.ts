@@ -6,5 +6,4 @@ function getAppVersion(): string | null {
   return version.length > 0 ? version : null;
 }
 
-/** The information about the app from its manifest. */
 export const appInfoRepository: AppInfoRepository = { getAppVersion };

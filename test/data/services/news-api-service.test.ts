@@ -15,7 +15,6 @@ type FakeResponse = { status: number; ok: boolean; text: () => Promise<string> }
 
 type FetchInit = { method: string; headers: Record<string, string>; signal: AbortSignal };
 
-// What a fetch call does: resolve with a response, reject with an error, or stay pending.
 type FetchOutcome = FakeResponse | Error | 'pending';
 
 type NewsApiService = typeof import('@/data/services/news-api-service');
@@ -183,10 +182,8 @@ async function serviceErrorOf(promise: Promise<unknown>): Promise<NewsApiService
   return error as NewsApiServiceError;
 }
 
-// A new instance of the service, loaded with other values of the configuration and with the
-// fixture mode variable set to `useFixtures`, or unset; the modules imported above keep the
-// values of the mock at the top. `loadFixtureService` is called each time the fixture service
-// is loaded, and returns the real one.
+// The modules imported above keep the values of the mock at the top. `loadFixtureService` is
+// called each time the fixture service is loaded, and returns the real one.
 function loadServiceWith(
   values: ServiceConfig,
   useFixtures?: string

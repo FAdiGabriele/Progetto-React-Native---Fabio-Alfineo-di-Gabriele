@@ -19,17 +19,14 @@ import { formatDateTime, formatTime, isToday } from '@/presentation/utils/date';
 
 export type NewsStatus = 'idle' | 'loading' | 'refreshing' | 'loadingMore' | 'success' | 'error';
 
-/** Use cases the view model works with: by default the ones of the container. */
 export type NewsUseCases = {
   loadSectionNews: LoadSectionNews;
   loadMoreNews: LoadMoreNews;
   openArticle: OpenArticle;
 };
 
-/** Option of the category bar: the key of a section and its translated label. */
 export type NewsSectionOption = { key: NewsSectionKey; label: string };
 
-/** A card of the list, with its texts ready to show and the action of a tap. */
 export type NewsCardItem = {
   id: string;
   title: string;
@@ -42,12 +39,11 @@ export type NewsCardItem = {
   onPress: () => void;
 };
 
-/** The cards of one group of the list, under their translated heading. */
 export type NewsCardGroup = { key: NewsGroupKey; title: string; items: NewsCardItem[] };
 
 /**
- * A non-blocking notice over the list: the error of a load that failed with the list still on
- * screen, or of the failed request of a partial first page, or an article that could not be opened.
+ * A non-blocking notice over the list; `partial` marks the error of the failed request of a
+ * first page whose other requests succeeded.
  */
 export type NewsNotice =
   | { kind: 'loadFailed'; error: NewsError; partial: boolean }
@@ -56,17 +52,16 @@ export type NewsNotice =
 export type NewsViewModel = {
   status: NewsStatus;
   selectedSection: NewsSectionKey;
-  /** Options of the category bar, in section order. */
   sectionOptions: readonly NewsSectionOption[];
   /**
-   * Groups of cards of the list, in section order: one per request of the first page that
-   * returned articles, then the group of the more news added at the end; empty without articles.
+   * One group per request of the first page that returned articles, in section order, then the
+   * group of the more news.
    */
   groups: NewsCardGroup[];
   /**
    * Translated message of the error of the last failed load, or of the failed request of a
-   * partial first page; null when the last load succeeded completely. The screen shows it in
-   * the error state, without articles; with articles the same error is reported by `notice`.
+   * partial first page; null during a load and after one that succeeded completely. The screen
+   * shows it only in the error state without articles; otherwise `notice` reports the same error.
    */
   errorMessage: string | null;
   /**
@@ -76,31 +71,25 @@ export type NewsViewModel = {
    */
   updatedAtLabel?: string;
   /**
-   * Translated message of the non-blocking notice to show over the list, or null: a refresh or
-   * a page that failed with the list on screen, the saved list, a partial first page or an
-   * article that could not be opened. A successful load, another section, leaving the list or
-   * `dismissNotice` hide it.
+   * Translated message of the non-blocking notice over the list, or null: a refresh or a page
+   * that failed with the list on screen, a failed load shown with the saved list, a partial
+   * first page or an article that could not be opened. A successful load, another section, the
+   * loading state or `dismissNotice` hide it.
    */
   notice: string | null;
-  /** Whether the section still has more news to load at the end of the list. */
   hasMore: boolean;
-  /**
-   * Whether the last page of more news failed and no load is in progress: the end of the list
-   * offers to retry it with `loadMore`.
-   */
+  /** The last page of more news failed and no load is in progress; `loadMore` retries it. */
   loadMoreFailed: boolean;
   selectSection: (section: NewsSectionKey) => void;
   refresh: () => void;
   /**
-   * Appends the next page of the section to the list, or retries the one that failed; a page
-   * that adds nothing is followed at once by the next one, until one adds articles, fails or
-   * is the last. Ignored without more pages or while another load is in progress.
+   * Appends the next page of more news, or retries the one that failed; ignored without more
+   * pages or while another load is in progress.
    */
   loadMore: () => void;
   dismissNotice: () => void;
 };
 
-/** State of the news screen, kept by the reducer of the view model. */
 export type NewsState = {
   groups: NewsGroup[];
   status: NewsStatus;
@@ -113,7 +102,6 @@ export type NewsState = {
   loadMoreFailed: boolean;
 };
 
-/** Events that move the state of the news screen: what the view model dispatches. */
 export type NewsAction =
   | { type: 'sectionSelected'; section: NewsSectionKey }
   | { type: 'loadStarted' }
@@ -135,7 +123,6 @@ export type NewsAction =
 
 const INITIAL_SECTION: NewsSectionKey = NEWS_SECTION_KEYS[0];
 
-/** State before the first load: the first section selected, nothing loaded yet. */
 export const INITIAL_NEWS_STATE: NewsState = {
   groups: [],
   status: 'idle',
@@ -149,7 +136,6 @@ function loadFailedNotice(error: NewsError): NewsNotice {
   return { kind: 'loadFailed', error, partial: false };
 }
 
-/** Pure transition of the state of the news screen for one event. */
 export function reduceNewsState(state: NewsState, action: NewsAction): NewsState {
   switch (action.type) {
     case 'sectionSelected':
@@ -204,8 +190,6 @@ export function reduceNewsState(state: NewsState, action: NewsAction): NewsState
           loadMoreFailed: false,
         };
       }
-      // With articles on screen the failed refresh is reported over them; without articles
-      // the error state reports it.
       return {
         ...state,
         status: 'error',
@@ -256,7 +240,6 @@ function toCardTexts(
   };
 }
 
-// Only the time when the list was received today, the date and time otherwise.
 function toUpdatedAtLabel(
   updatedAt: Date | undefined,
   t: I18n['t'],
@@ -282,12 +265,9 @@ function toNoticeMessage(notice: NewsNotice, t: I18n['t']): string {
 }
 
 /**
- * State and actions of the news screen, ready to render: the selected section and the options
- * of the category bar, the groups of cards of its articles and later pages, the message of the
- * last error, when the list was received, the non-blocking notice and the loading of more news,
- * with the retry of a page that failed; a tap on a card opens the article in the browser. The
- * use cases load the news and open the articles; every load cancels the previous one, whose
- * outcome is discarded, so only the most recent request ever updates the state.
+ * State and actions of the news screen, ready to render. Every load, of a first page or of more
+ * news, cancels the previous one and discards its outcome, so only the latest load updates the
+ * state.
  */
 export function useNewsViewModel(useCases: NewsUseCases = newsUseCases): NewsViewModel {
   const { loadSectionNews, loadMoreNews, openArticle: openArticleInBrowser } = useCases;
@@ -329,7 +309,7 @@ export function useNewsViewModel(useCases: NewsUseCases = newsUseCases): NewsVie
           }
         },
         () => {
-          // Only a cancelled load rejects: a newer one has taken its place.
+          // Only a cancelled load rejects: a newer load took its place, or the screen unmounted.
         }
       );
     },
@@ -385,7 +365,7 @@ export function useNewsViewModel(useCases: NewsUseCases = newsUseCases): NewsVie
         }
       },
       () => {
-        // Only a cancelled load rejects: a newer one has taken its place.
+        // Only a cancelled load rejects: a newer load took its place, or the screen unmounted.
       }
     );
   }, [cursor, groups, hasArticles, isCurrent, loadMoreNews, selectedSection, startRequest, status]);

@@ -1,12 +1,10 @@
 import type { Article, NewsGroup } from '@/domain/models/news-model';
 
-/** Text as the duplicate rule compares it: trimmed, with single spaces and in lower case. */
 export function normalizeForComparison(text: string): string {
   return text.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
-// The calendar day of the publication date in the device time zone, the one of the date shown
-// on the card; empty without a date.
+// The publication day in the device time zone, like the date shown on the card.
 function getPublicationDay(article: Article): string {
   const date = article.publishedAt;
   return date === undefined ? '' : `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;

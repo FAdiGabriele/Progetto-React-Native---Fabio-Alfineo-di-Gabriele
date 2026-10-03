@@ -39,10 +39,6 @@ function translate(dictionary: Dictionary, key: TranslationKey, params?: Transla
 
 const I18nContext = createContext<I18n | null>(null);
 
-/**
- * Provides the interface language to its children, starting from the saved language read
- * at startup; without a valid saved value the language is Italian.
- */
 export function I18nProvider({
   initialLanguage,
   children,

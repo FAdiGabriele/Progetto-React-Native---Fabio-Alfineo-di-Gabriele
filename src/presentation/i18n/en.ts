@@ -1,6 +1,5 @@
 import type { Dictionary } from '@/presentation/i18n/it';
 
-/** English texts of the interface, with the same keys as the Italian dictionary. */
 export const en: Dictionary = {
   'app.name': 'News App',
   'news.updatedAtTime': 'Last checked at {time}',

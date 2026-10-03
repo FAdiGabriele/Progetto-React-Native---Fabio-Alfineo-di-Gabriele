@@ -5,7 +5,6 @@ import topHeadlinesItaly from '@/data/services/fixtures/top-headlines-italy.json
 import topHeadlinesUs from '@/data/services/fixtures/top-headlines-us.json';
 import type { NewsApiPageDto, NewsApiRequestDto } from '@/data/services/news-api-dto';
 
-/** A request of the news sections, without the paging parameters: those do not select the fixture. */
 type FixtureRequest =
   | { endpoint: 'top-headlines'; country: string }
   | { endpoint: 'top-headlines'; sources: readonly string[] }

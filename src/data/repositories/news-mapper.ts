@@ -28,8 +28,8 @@ function toOptionalText(value: unknown): string | undefined {
   return trimmed === 'null' ? undefined : trimmed;
 }
 
-// The title without a final separator followed by one of the names, compared like the
-// duplicate keys; a title made only of the suffix is left as it is.
+// Strips a final separator and one of the names, which may itself contain a separator, compared
+// ignoring case and extra spaces; a title made only of the suffix is kept.
 function withoutSourceSuffix(title: string, names: readonly string[]): string {
   const normalizedNames = names.map(normalizeForComparison);
   for (const separator of SOURCE_SUFFIX_SEPARATORS) {
@@ -85,16 +85,15 @@ function toArticles(dtos: readonly NewsApiArticleDto[]): Article[] {
   return dtos.map(mapArticle).filter((article) => article !== undefined);
 }
 
-/** The article DTOs of one request and the key of the group that shows them. */
 export type NewsGroupDtos<Key extends string> = {
   key: Key;
   articles: readonly NewsApiArticleDto[];
 };
 
 /**
- * Converts the article DTOs of one request into domain articles: invalid or removed articles
- * are dropped, optional fields are normalized, the source suffix of the title is removed and
- * duplicates, by URL or by title, source and publication day, keep their first occurrence.
+ * Converts article DTOs into domain articles: invalid or removed articles are dropped, optional
+ * fields are normalized, the source suffix of the title is removed and duplicates keep their
+ * first occurrence.
  */
 export function mapArticles(dtos: readonly NewsApiArticleDto[]): Article[] {
   return withoutDuplicates([], toArticles(dtos));

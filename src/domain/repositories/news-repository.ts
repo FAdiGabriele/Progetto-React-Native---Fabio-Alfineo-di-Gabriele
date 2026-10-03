@@ -1,6 +1,5 @@
 import type { NewsPage, NewsPageCursor, NewsSectionKey, SavedNews } from '@/domain/models/news-model';
 
-/** Access to the news of the sections: the port that the data layer implements. */
 export interface NewsRepository {
   /**
    * One page of a news section. Without a cursor, the first page: the groups of its requests

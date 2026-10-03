@@ -1,4 +1,3 @@
-// https://docs.expo.dev/guides/using-eslint/
 const { defineConfig } = require('eslint/config');
 const expoConfig = require('eslint-config-expo/flat');
 
@@ -27,7 +26,7 @@ const NEWS_SCREEN = nested('presentation', 'screens/news');
 const SETTINGS_SCREEN = nested('presentation', 'screens/settings');
 const COMPONENTS = nested('presentation', 'components');
 const I18N = nested('presentation', 'i18n');
-// presentation/theme/ holds theme.ts, with the colors and the layout measures, and the theme provider.
+// presentation/theme/ holds theme.ts and the theme provider.
 const THEME_FOLDER = nested('presentation', 'theme');
 const THEME = String.raw`${inside('presentation')}theme/theme(?:\.\w+)*$`;
 const THEME_PREFERENCE = String.raw`${inside('presentation')}theme(?:/(?!theme(?:\.\w+)*$)|$)`;
@@ -40,7 +39,8 @@ const HOOKS_EXCEPT_COLOR_SCHEME = String.raw`${inside('presentation')}hooks(?!/u
 const PRESENTATION_UTILS = nested('presentation', 'utils');
 const PROJECT_EXCEPT_CONFIG = String.raw`^(?!(?:@/data/|\./)config(?:\.\w+)*$)(?:@/|\.\.?/)`;
 const PROJECT_EXCEPT_DATA_UTILS = String.raw`^(?!@/data/utils/|\./|(?:\.\./)+(?:data/)?utils/)(?:@/|\.\.?/)`;
-// A relative path that climbs to the project root and goes back into src/, which the patterns above miss.
+// A relative path that climbs to the project root and goes back into src/, which the folder-name
+// patterns above miss.
 const THROUGH_ROOT = String.raw`^(?:\.\./)+src(?:/|$)`;
 const REACT_LIBRARY = String.raw`^react(?:/|$)`;
 const REACT = String.raw`^react(?:-native)?(?:/|$)`;
@@ -158,7 +158,8 @@ module.exports = defineConfig([
       PROJECT_EXCEPT_DATA_UTILS,
     ])
   ),
-  // Blocks by file name, like this one and the view model one, cover only src/: no test has those names.
+  // Blocks by file name, like this one and the view model one, cover only src/: a test imports
+  // its own module, which their rules forbid, so it keeps the rule of its folder.
   restrictImports(
     ['src/data/services/**/*-dto.ts', 'src/domain/models/**/*-model.ts'],
     forbid('DTO and model files only declare types, constants and error classes: they import nothing.', [
@@ -231,7 +232,7 @@ module.exports = defineConfig([
       [APP, DATA, SCREENS, COMPONENTS, THEME_FOLDER, BOOTSTRAP, HOOKS, PRESENTATION_UTILS]
     )
   ),
-  // presentation/theme/theme.ts and its test take the rule of their own block, further down.
+  // presentation/theme/theme.ts takes the rule of its own block, further down.
   restrictImports(
     withTests('presentation/theme/**'),
     forbid(
@@ -258,7 +259,6 @@ module.exports = defineConfig([
     )
   ),
   restrictImports(withTests('presentation/hooks/**', 'presentation/utils/**'), forbid(SUPPORT_MESSAGE, SUPPORT_FORBIDDEN)),
-  // From theme.ts, the other files of its folder belong to the theme provider.
   restrictImports(
     withTests('presentation/theme/theme.ts'),
     forbid(SUPPORT_MESSAGE, [...SUPPORT_FORBIDDEN, THEME_PREFERENCE_SIBLING])
