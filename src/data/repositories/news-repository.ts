@@ -1,0 +1,225 @@
+import { NEWS_MAX_RESULTS } from '@/data/config';
+import { mapGroups } from '@/data/repositories/news-mapper';
+import { NEWS_SECTION_REQUESTS, type NewsSectionRequests } from '@/data/repositories/news-section-requests';
+import type { NewsApiArticleDto, NewsApiPageDto, NewsApiRequestDto } from '@/data/services/news-api-dto';
+import { getArticles, NewsApiServiceError } from '@/data/services/news-api-service';
+import { readEntry, writeEntry } from '@/data/services/news-cache-service';
+import {
+  NewsError,
+  type NewsErrorKind,
+  type NewsPage,
+  type NewsPageCursor,
+  type NewsSectionKey,
+  type SavedNews,
+} from '@/domain/models/news-model';
+import type { NewsRepository } from '@/domain/repositories/news-repository';
+import { parseIsoDate } from '@/data/utils/date';
+
+const FIRST_PAGE = 1;
+
+function getSectionRequests(sectionKey: NewsSectionKey): NewsSectionRequests {
+  if (!Object.prototype.hasOwnProperty.call(NEWS_SECTION_REQUESTS, sectionKey)) {
+    throw new Error(`Unknown news section: ${sectionKey}`);
+  }
+  return NEWS_SECTION_REQUESTS[sectionKey];
+}
+
+// The NewsAPI codes that say more than the HTTP status they come with.
+function toCodeErrorKind(code: string | undefined): NewsErrorKind | undefined {
+  switch (code) {
+    case 'rateLimited':
+      return 'rateLimit';
+    case 'apiKeyExhausted':
+      return 'quotaExhausted';
+    case 'maximumResultsReached':
+      return 'resultsLimit';
+    default:
+      return undefined;
+  }
+}
+
+function toStatusErrorKind(status: number | undefined): NewsErrorKind {
+  switch (status) {
+    case 400:
+      return 'badRequest';
+    case 401:
+      return 'auth';
+    case 429:
+      return 'rateLimit';
+    default:
+      return status !== undefined && status >= 500 && status <= 599 ? 'server' : 'unknown';
+  }
+}
+
+function toHttpErrorKind(error: NewsApiServiceError): NewsErrorKind {
+  return toCodeErrorKind(error.code) ?? toStatusErrorKind(error.status);
+}
+
+function toNewsErrorKind(error: NewsApiServiceError): NewsErrorKind {
+  switch (error.reason) {
+    case 'missingKey':
+      return 'auth';
+    case 'network':
+      return 'network';
+    case 'timeout':
+      return 'timeout';
+    case 'http':
+      return toHttpErrorKind(error);
+    case 'invalidResponse':
+      return 'unknown';
+  }
+}
+
+const DEVELOPER_HINTS: Partial<Record<NewsErrorKind, string>> = {
+  auth: 'Check EXPO_PUBLIC_NEWS_API_KEY in the .env file and restart the development server.',
+  badRequest: 'Check the requests in data/repositories/news-section-requests.ts.',
+};
+
+// The user reads a neutral message: the details of a configuration error go to the log.
+function logConfigurationError(error: NewsApiServiceError, kind: NewsErrorKind): void {
+  const hint = DEVELOPER_HINTS[kind];
+  if (hint === undefined) {
+    return;
+  }
+  const details = [error.reason, error.status, error.code, error.message].filter(
+    (detail) => detail !== undefined
+  );
+  console.warn(`NewsAPI configuration error (${[...new Set(details)].join(', ')}). ${hint}`);
+}
+
+function toNewsError(error: unknown): NewsError {
+  let kind: NewsErrorKind = 'unknown';
+  if (error instanceof NewsApiServiceError) {
+    kind = toNewsErrorKind(error);
+    logConfigurationError(error, kind);
+  }
+  const newsError = new NewsError(kind);
+  newsError.cause = error;
+  return newsError;
+}
+
+// A NewsApiServiceError is never a cancellation, even when `signal` was aborted after it.
+function isCancellation(error: unknown, signal?: AbortSignal): boolean {
+  if (error instanceof NewsApiServiceError) {
+    return false;
+  }
+  return signal?.aborted === true || (error instanceof Error && error.name === 'AbortError');
+}
+
+function toThrowable(error: unknown, signal?: AbortSignal): unknown {
+  return isCancellation(error, signal) ? error : toNewsError(error);
+}
+
+function withPage(request: NewsApiRequestDto, page: number): NewsApiRequestDto {
+  return page === FIRST_PAGE ? request : { ...request, page };
+}
+
+function hasMorePages(page: number, pageSize: number, totalResults: number): boolean {
+  const received = page * pageSize;
+  return received < totalResults && received < NEWS_MAX_RESULTS;
+}
+
+function toFirstPageGroups(section: NewsSectionRequests, requestArticles: readonly NewsApiArticleDto[][]) {
+  return mapGroups(
+    section.requests.map(({ group }, index) => ({ key: group, articles: requestArticles[index] }))
+  );
+}
+
+async function saveEntry(sectionKey: string, requests: NewsApiArticleDto[][]): Promise<void> {
+  try {
+    await writeEntry(sectionKey, { savedAt: new Date().toISOString(), requests });
+  } catch {
+    // A page that cannot be saved is still a valid page.
+  }
+}
+
+async function getFirstPage(sectionKey: NewsSectionKey, signal?: AbortSignal): Promise<NewsPage> {
+  const section = getSectionRequests(sectionKey);
+  const results = await Promise.allSettled(
+    section.requests.map(({ request }) => getArticles(request, signal))
+  );
+
+  const failures = results.filter((result) => result.status === 'rejected');
+  let partialError: NewsError | undefined;
+  if (failures.length > 0) {
+    const failure = toThrowable(failures[0].reason, signal);
+    // Every request failed, or the caller cancelled: there is no page to return.
+    if (failures.length === results.length || !(failure instanceof NewsError)) {
+      throw failure;
+    }
+    partialError = failure;
+  }
+
+  const requestArticles = results.map((result) =>
+    result.status === 'fulfilled' ? result.value.articles : []
+  );
+  const groups = toFirstPageGroups(section, requestArticles);
+  // A partial page does not replace the complete list saved by an earlier load.
+  if (groups.length > 0 && partialError === undefined) {
+    await saveEntry(sectionKey, requestArticles);
+  }
+
+  const page: NewsPage =
+    section.moreRequest === undefined ? { groups } : { groups, next: { page: FIRST_PAGE } };
+  return partialError === undefined ? page : { ...page, partialError };
+}
+
+async function getMorePage(
+  sectionKey: NewsSectionKey,
+  cursor: NewsPageCursor,
+  signal?: AbortSignal
+): Promise<NewsPage> {
+  const more = getSectionRequests(sectionKey).moreRequest;
+  if (more === undefined) {
+    return { groups: [] };
+  }
+
+  let page: NewsApiPageDto;
+  try {
+    page = await getArticles(withPage(more.request, cursor.page), signal);
+  } catch (error) {
+    throw toThrowable(error, signal);
+  }
+
+  const groups = mapGroups([{ key: more.group, articles: page.articles }]);
+  return hasMorePages(cursor.page, more.request.pageSize, page.totalResults)
+    ? { groups, next: { page: cursor.page + 1 } }
+    : { groups };
+}
+
+/**
+ * Fetches one page of a news section. The requests of a first page run in parallel: the error
+ * of the first failed one rejects the page when all of them fail and is its `partialError`
+ * otherwise. A first page without failures and with at least one article is saved as the last
+ * list of the section, ignoring a failed save.
+ */
+async function getSectionArticles(
+  sectionKey: NewsSectionKey,
+  signal?: AbortSignal,
+  cursor?: NewsPageCursor
+): Promise<NewsPage> {
+  return cursor === undefined
+    ? getFirstPage(sectionKey, signal)
+    : getMorePage(sectionKey, cursor, signal);
+}
+
+/**
+ * Last saved list of a news section, or null when there is none to show. The saved article
+ * DTOs are matched to the requests of the section by position, so a list saved with a
+ * different number of requests is discarded.
+ */
+async function getSavedSectionArticles(sectionKey: NewsSectionKey): Promise<SavedNews | null> {
+  const section = getSectionRequests(sectionKey);
+  const entry = await readEntry(sectionKey);
+  if (entry === null) {
+    return null;
+  }
+  const savedAt = parseIsoDate(entry.savedAt);
+  if (savedAt === undefined || entry.requests.length !== section.requests.length) {
+    return null;
+  }
+  const groups = toFirstPageGroups(section, entry.requests);
+  return groups.length > 0 ? { groups, savedAt } : null;
+}
+
+export const newsRepository: NewsRepository = { getSectionArticles, getSavedSectionArticles };
